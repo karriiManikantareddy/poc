@@ -94,8 +94,12 @@ def run_agent(
     session — see main.py), both the model call and every tool run as that
     employee, so real Unity Catalog grants on THEIR identity are what's
     actually enforced, not the app's own blanket access."""
+    # auth_type="pat" is required: without it, Config also picks up this
+    # app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and refuses to
+    # proceed with "more than one authorization method configured" — a real
+    # error hit building this, not a hypothetical.
     obo_client = (
-        WorkspaceClient(config=Config(token=obo_token)) if obo_token else None
+        WorkspaceClient(config=Config(token=obo_token, auth_type="pat")) if obo_token else None
     )
     llm = get_llm(agent.get("model", ""), obo_token=obo_token)
     tools = [build_tool(t, obo_client) for t in tools_config]

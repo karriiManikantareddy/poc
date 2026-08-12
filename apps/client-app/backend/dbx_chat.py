@@ -67,7 +67,11 @@ class DatabricksEndpointChat(BaseChatModel):
         return self.bind(tools=formatted, **kwargs)
 
     def _generate(self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs: Any) -> ChatResult:
-        cfg = Config(token=self.obo_token) if self.obo_token else Config()
+        # auth_type="pat" is required: without it, Config also picks up this
+        # app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and refuses
+        # to proceed with "more than one authorization method configured" —
+        # hit this for real building the group-lookup path, fixed here too.
+        cfg = Config(token=self.obo_token, auth_type="pat") if self.obo_token else Config()
         headers = cfg.authenticate()
         url = f"{cfg.host}/serving-endpoints/{self.endpoint}/invocations"
 

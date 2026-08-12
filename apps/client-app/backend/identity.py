@@ -55,12 +55,18 @@ def get_caller_groups(access_token: Optional[str]) -> list[str]:
     can always read your own group membership). Fails safe to no groups
     (not full access) if the lookup itself errors."""
     try:
-        w = WorkspaceClient(config=Config(token=access_token)) if access_token else WorkspaceClient()
+        # auth_type="pat" is required here: without it, Config also picks up
+        # this app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and
+        # refuses to proceed with "more than one authorization method
+        # configured" — confirmed by hitting that exact error for real.
+        w = (
+            WorkspaceClient(config=Config(token=access_token, auth_type="pat"))
+            if access_token
+            else WorkspaceClient()
+        )
         me = w.current_user.me()
-    except Exception as exc:  # noqa: BLE001 - fail safe, don't crash the request over a transient SCIM error
-        print(f"[identity] group lookup failed: {exc!r}")  # TEMP diagnostic
+    except Exception:  # noqa: BLE001 - fail safe, don't crash the request over a transient SCIM error
         return []
-    print(f"[identity] me.groups={me.groups!r}")  # TEMP diagnostic
     return [g.display for g in (me.groups or []) if g.display]
 
 
