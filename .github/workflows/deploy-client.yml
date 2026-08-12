@@ -1,0 +1,48 @@
+name: Deploy Client App
+
+# Triggered by the Control Panel (or manually via `gh workflow run` / the
+# Actions tab). Runs on GitHub's own runners specifically because Databricks
+# Apps enforce a 120-second request timeout and a no-root container - this
+# job routinely takes 2-4 minutes and needs a real build environment, neither
+# of which a Databricks App can do for itself. See architecture.drawio.
+on:
+  workflow_dispatch:
+    inputs:
+      client_environment:
+        description: "GitHub Environment name holding this client's Databricks credentials (e.g. client-poc-real)"
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Selecting the environment here is what makes THIS client's secrets
+    # (DATABRICKS_HOST / DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET)
+    # available below, and no other client's.
+    environment: ${{ inputs.client_environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Databricks CLI
+        run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+
+      - name: Verify identity (fails fast if credentials are wrong)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+        run: databricks current-user me
+
+      - name: Deploy app
+        working-directory: apps/poc-placeholder
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+        run: databricks apps deploy --auto-approve

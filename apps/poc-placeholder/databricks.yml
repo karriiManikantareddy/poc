@@ -1,0 +1,20 @@
+bundle:
+  name: poc-placeholder
+
+resources:
+  apps:
+    app:
+      name: "poc-placeholder"
+      description: "Minimal placeholder app to prove Control Panel deploy automation"
+      source_code_path: ./
+      # Uncomment to enable on behalf of user API scopes. Available scopes: sql, dashboards.genie, files.files, serving.serving-endpoints
+      # user_api_scopes:
+      #   - sql
+
+targets:
+  default:
+    default: true
+    # No hardcoded workspace host here on purpose: this bundle is shared
+    # across every client. The actual target workspace is resolved from
+    # DATABRICKS_HOST / DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET,
+    # injected per-client by the GitHub Actions Environment that runs this.
