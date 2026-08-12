@@ -167,11 +167,13 @@ def run_agent(
     elif llm.last_call_was_obo:
         ran_as = f"employee ({caller_email}) — model + tools"
     else:
-        # Real, current platform gap, not a bug: Databricks Apps can't
-        # declare the "model-serving-inference" scope an OBO'd model call
-        # needs, so that leg falls back to the app's own identity while
-        # tools (SQL etc.) still run as the employee for real.
-        ran_as = f"employee ({caller_email}) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+        # See dbx_chat.py — this branch hit once right after the
+        # model-serving scope was first declared, then stopped
+        # reproducing on retest with no code change (likely scope
+        # propagation delay, not a permanent block). Kept as a real
+        # fallback rather than removed, so a recurrence degrades
+        # gracefully instead of failing the whole run.
+        ran_as = f"employee ({caller_email}) for tools; app identity for the model call (see dbx_chat.py notes)"
 
     return {
         "id": f"run-{uuid.uuid4().hex[:8]}",

@@ -46,18 +46,18 @@ def _to_openai_message(message: BaseMessage) -> dict[str, Any]:
 class DatabricksEndpointChat(BaseChatModel):
     """Calls a real serving endpoint in the workspace this app is deployed to.
 
-    When `obo_token` is set, this tries to run the call AS that employee
-    first. Confirmed by testing against a live deployment: Databricks Apps
-    can only declare "model-serving" in user_api_scopes, but the real
-    /invocations route demands "model-serving, model-serving-inference"
-    together, and "model-serving-inference" is rejected outright as an
-    invalid scope if you try to declare it. So an OBO'd inference call
-    currently always 403s with insufficient scopes — a real platform gap,
-    not something fixable from this app's code. Rather than hard-failing
-    the whole agent run over it, this falls back to the app's own identity
-    for the model call specifically, and reports that honestly via
-    `last_call_was_obo` so the run record doesn't overclaim per-employee
-    scoping it can't currently deliver for this one leg."""
+    When `obo_token` is set, this runs the call AS that employee. Hit a
+    real 403 ("missing scopes: model-serving, model-serving-inference")
+    right after first declaring "model-serving" in user_api_scopes —
+    "model-serving-inference" itself is rejected as an invalid scope if
+    you try to declare it directly. Re-tested minutes later with no code
+    change and it succeeded, repeatedly — so this was very likely the
+    newly-declared scope not having fully propagated into freshly-issued
+    forwarded tokens yet, not a hard platform block. Kept the fallback
+    below anyway: if that 403 ever recurs (e.g. right after a fresh
+    deploy), this degrades to the app's own identity for the model call
+    instead of hard-failing the whole agent run, and reports the real
+    outcome via `last_call_was_obo` either way."""
 
     endpoint: str
     temperature: float = 0.2
