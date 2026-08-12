@@ -18,8 +18,10 @@ same honest scoping-down documented in this project's README.
 """
 import uuid
 from datetime import datetime, timezone
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, StateGraph
@@ -40,18 +42,27 @@ class RunState(TypedDict):
     steps: int
 
 
-def get_llm(model_endpoint: str):
+def get_llm(model_endpoint: str, obo_token: Optional[str] = None):
     if not model_endpoint:
         raise AgentError("This agent has no model selected — pick a serving endpoint before running it.")
     try:
-        return DatabricksEndpointChat(endpoint=model_endpoint)
+        return DatabricksEndpointChat(endpoint=model_endpoint, obo_token=obo_token)
     except Exception as exc:  # noqa: BLE001 - surfacing the SDK's own error message is the point
         raise AgentError(f"Could not reach model serving endpoint '{model_endpoint}': {exc}") from exc
 
 
-def build_tool(tool_config: dict[str, Any]) -> StructuredTool:
-    """Turns a stored Action Pack entry into a real, callable LangChain tool."""
-    namespace: dict[str, Any] = {}
+def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient] = None) -> StructuredTool:
+    """Turns a stored Action Pack entry into a real, callable LangChain tool.
+
+    `obo_client` (when available) is injected into the exec namespace as `w`
+    so a tool's own code can do `w.statement_execution.execute_statement(...)`
+    and have it run as the calling employee, not the app's identity — no
+    extra plumbing needed in the tool author's code. Known, accepted limit:
+    if a tool does its own `WorkspaceClient()` construction instead of using
+    the injected `w`, that call silently reverts to the app's own identity —
+    we don't sandbox imports away, so this can't be fully prevented, only
+    documented (see the New Tool modal's placeholder text)."""
+    namespace: dict[str, Any] = {"w": obo_client or WorkspaceClient()}
     try:
         exec(tool_config["code"], namespace)  # noqa: S102 - intentional, this IS the Action Pack execution model
     except Exception as exc:  # noqa: BLE001
@@ -69,11 +80,25 @@ def build_tool(tool_config: dict[str, Any]) -> StructuredTool:
     )
 
 
-def run_agent(agent: dict[str, Any], tools_config: list[dict[str, Any]], question: str) -> dict[str, Any]:
+def run_agent(
+    agent: dict[str, Any],
+    tools_config: list[dict[str, Any]],
+    question: str,
+    obo_token: Optional[str] = None,
+    caller_email: Optional[str] = None,
+) -> dict[str, Any]:
     """Executes one agent's own flow end to end and returns a full trace —
-    this is the literal implementation of page 3's Steps 1-3."""
-    llm = get_llm(agent.get("model", ""))
-    tools = [build_tool(t) for t in tools_config]
+    this is the literal implementation of page 3's Steps 1-3.
+
+    When `obo_token` is available (forwarded from the caller's own browser
+    session — see main.py), both the model call and every tool run as that
+    employee, so real Unity Catalog grants on THEIR identity are what's
+    actually enforced, not the app's own blanket access."""
+    obo_client = (
+        WorkspaceClient(config=Config(token=obo_token)) if obo_token else None
+    )
+    llm = get_llm(agent.get("model", ""), obo_token=obo_token)
+    tools = [build_tool(t, obo_client) for t in tools_config]
     llm_with_tools = llm.bind_tools(tools) if tools else llm
     tools_by_name = {t.name: t for t in tools}
 
@@ -140,4 +165,5 @@ def run_agent(agent: dict[str, Any], tools_config: list[dict[str, Any]], questio
         "answer": final_answer,
         "trace": final_state["trace"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ran_as": f"employee ({caller_email})" if obo_token and caller_email else "app identity (no OBO token forwarded)",
     }

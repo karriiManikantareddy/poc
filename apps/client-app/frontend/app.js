@@ -158,7 +158,7 @@ function renderTrace(record) {
       return `<div><strong>Act (${escapeHtml(s.tool)}):</strong> ${escapeHtml(JSON.stringify(s.args))} → ${escapeHtml(s.result)}</div>`;
     })
     .join("");
-  return `<div style="margin-bottom:8px;"><strong>Answer:</strong> ${escapeHtml(record.answer || "(no final answer produced)")}</div><div class="hint">${steps}</div>`;
+  return `<div style="margin-bottom:8px;"><strong>Answer:</strong> ${escapeHtml(record.answer || "(no final answer produced)")}</div><div class="hint">Ran as: ${escapeHtml(record.ran_as || "unknown")}</div><div class="hint">${steps}</div>`;
 }
 
 function renderRunHistory(runs) {
@@ -206,6 +206,24 @@ async function openAgentModal(agent) {
 
   await loadTools();
   renderToolCheckboxes(agent ? agent.tools || [] : []);
+
+  const groupsContainer = document.getElementById("ag-groups-list");
+  groupsContainer.innerHTML = `<p class="hint">Loading groups...</p>`;
+  try {
+    const allGroups = await api("GET", "/groups");
+    const selected = agent ? agent.visible_to_groups || [] : [];
+    groupsContainer.innerHTML =
+      allGroups
+        .map(
+          (g) => `<label class="checkbox-label" style="margin:4px 0;">
+        <input type="checkbox" class="ag-group-checkbox" value="${escapeHtml(g)}" ${selected.includes(g) ? "checked" : ""}>
+        ${escapeHtml(g)}
+      </label>`
+        )
+        .join("") || `<p class="hint">No groups found in this workspace.</p>`;
+  } catch (e) {
+    groupsContainer.innerHTML = `<p class="hint">Could not load groups: ${escapeHtml(e.message)}</p>`;
+  }
 }
 
 function renderToolCheckboxes(selectedToolIds) {
@@ -228,10 +246,11 @@ document.getElementById("agent-modal-save").addEventListener("click", async () =
   const prompt = document.getElementById("ag-prompt").value;
   const model = document.getElementById("ag-model").value;
   const selectedTools = Array.from(document.querySelectorAll(".ag-tool-checkbox:checked")).map((el) => el.value);
+  const selectedGroups = Array.from(document.querySelectorAll(".ag-group-checkbox:checked")).map((el) => el.value);
 
   if (!name) return;
 
-  const body = { name, prompt, model, tools: selectedTools, status: "published" };
+  const body = { name, prompt, model, tools: selectedTools, visible_to_groups: selectedGroups, status: "published" };
   if (editingAgentId) {
     await api("PUT", `/agents/${editingAgentId}`, body);
   } else {
@@ -593,6 +612,14 @@ document.getElementById("connector-modal-save").addEventListener("click", async 
 
 // ---------------- init ----------------
 (async function init() {
+  try {
+    const who = await api("GET", "/whoami");
+    document.getElementById("whoami-badge").textContent = who.email
+      ? `Signed in as ${who.email}${who.is_admin ? " (admin)" : ""}`
+      : "Local dev — no forwarded identity, full access";
+  } catch {
+    /* non-critical, leave badge blank */
+  }
   await loadTools();
   await loadAgents();
 })();

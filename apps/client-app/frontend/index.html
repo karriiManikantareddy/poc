@@ -8,11 +8,12 @@
 </head>
 <body>
 
-<header>
+<header style="justify-content:space-between;">
   <div class="brand">
     <span class="brand-mark"></span>
     <span class="brand-name">Client App</span>
   </div>
+  <span id="whoami-badge" style="color:#C9D6D8;font-size:var(--fs-sm);"></span>
 </header>
 
 <div class="shell">
@@ -123,6 +124,8 @@
     <select id="ag-model"><option value="">Loading endpoints...</option></select>
     <label for="ag-tools">Tools attached to this agent</label>
     <div id="ag-tools-list" class="card" style="padding:10px;max-height:140px;overflow-y:auto;"></div>
+    <label for="ag-groups">Visible to (this workspace's real Groups — leave all unchecked to allow everyone)</label>
+    <div id="ag-groups-list" class="card" style="padding:10px;max-height:120px;overflow-y:auto;"></div>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn secondary" id="agent-modal-cancel">Cancel</button>
       <button class="btn" id="agent-modal-save">Save Agent</button>
@@ -189,6 +192,7 @@
     <label for="tl-description">Description (tells the model when to use it)</label>
     <input type="text" id="tl-description" placeholder="Looks up the current status of an order by ID">
     <label for="tl-code">Python code — must define a function with the exact name above</label>
+    <p class="hint" style="margin:0 0 8px;">A ready-to-use client is available as <code>w</code> — it's already scoped to the employee running the agent. Use <code>w.statement_execution.execute_statement(...)</code> etc. directly; don't construct your own <code>WorkspaceClient()</code>, or you'll silently lose that per-employee scoping.</p>
     <textarea id="tl-code" rows="8" class="code-input" placeholder="def lookup_order_status(order_id: str) -> str:&#10;    return f'Order {order_id} is in transit'"></textarea>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn secondary" id="tool-modal-cancel">Cancel</button>

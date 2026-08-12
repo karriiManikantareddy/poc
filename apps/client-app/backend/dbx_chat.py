@@ -44,11 +44,19 @@ def _to_openai_message(message: BaseMessage) -> dict[str, Any]:
 
 
 class DatabricksEndpointChat(BaseChatModel):
-    """Calls a real serving endpoint in the workspace this app is deployed to."""
+    """Calls a real serving endpoint in the workspace this app is deployed to.
+
+    When `obo_token` is set (the caller's own forwarded X-Forwarded-Access-Token,
+    requires `serving.serving-endpoints` in this app's user_api_scopes — see
+    databricks.yml), the call runs AS that employee, not as the app's own
+    identity — so their own model-serving permissions/quotas apply, not the
+    app's. Falls back to the app's own identity when no token is available
+    (e.g. local dev with no reverse proxy in front)."""
 
     endpoint: str
     temperature: float = 0.2
     max_tokens: int = 1024
+    obo_token: Optional[str] = None
 
     @property
     def _llm_type(self) -> str:
@@ -59,7 +67,7 @@ class DatabricksEndpointChat(BaseChatModel):
         return self.bind(tools=formatted, **kwargs)
 
     def _generate(self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs: Any) -> ChatResult:
-        cfg = Config()
+        cfg = Config(token=self.obo_token) if self.obo_token else Config()
         headers = cfg.authenticate()
         url = f"{cfg.host}/serving-endpoints/{self.endpoint}/invocations"
 

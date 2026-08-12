@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import connectors
+import identity
 import store
 from connectors import ConnectorError
 from interpreter import AgentError, run_agent
@@ -38,13 +39,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-# TEMPORARY — verifying whether X-Forwarded-* headers are spoofable before
-# building any access control on top of them. Remove once confirmed.
-@app.get("/api/_debug/whoami")
-def debug_whoami(request: Request):
-    return {k: v for k, v in request.headers.items() if k.lower().startswith("x-forwarded")}
 
 
 # ---------- Model endpoints (real, live from this workspace — US-6.1) ----------
@@ -64,17 +58,43 @@ def list_model_endpoints():
         raise HTTPException(502, f"Could not list serving endpoints from this workspace: {exc}")
 
 
+# ---------- Identity / RBAC (real — architecture.drawio "RBAC / Governance Module") ----------
+
+@app.get("/api/whoami")
+def whoami(request: Request):
+    """What the UI uses to know who's asking — never echoes the raw
+    forwarded token back to the browser, only the derived, safe-to-show
+    facts (unlike the temporary debug endpoint this replaced)."""
+    caller = identity.get_caller(request)
+    groups, admin = identity.resolve_access(request)
+    return {"email": caller.email, "groups": groups, "is_admin": admin}
+
+
+@app.get("/api/groups")
+def groups():
+    """Real Databricks Groups in this workspace, live — used by the agent
+    editor to pick which real groups an agent is visible to, instead of
+    inventing an app-level role system."""
+    try:
+        w = WorkspaceClient()
+        return sorted({g.display_name for g in w.groups.list() if g.display_name})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"Could not list groups from this workspace: {exc}")
+
+
 # ---------- Agents (real — architecture.drawio page 3) ----------
 
 @app.get("/api/agents")
-def list_agents():
-    return store.read("agents")
+def list_agents(request: Request):
+    groups, admin = identity.resolve_access(request)
+    return [a for a in store.read("agents") if identity.can_see(a, groups, admin)]
 
 
 @app.get("/api/agents/{agent_id}")
-def get_agent(agent_id: str):
+def get_agent(agent_id: str, request: Request):
     agent = store.get_item("agents", agent_id)
-    if not agent:
+    groups, admin = identity.resolve_access(request)
+    if not agent or not identity.can_see(agent, groups, admin):
         raise HTTPException(404, "Agent not found")
     return agent
 
@@ -84,20 +104,29 @@ def create_agent(agent: dict[str, Any]):
     agent["id"] = f"agent-{uuid.uuid4().hex[:8]}"
     agent.setdefault("status", "draft")
     agent.setdefault("tools", [])
+    agent.setdefault("visible_to_groups", [])
     agent["created_at"] = now()
     return store.upsert_item("agents", agent)
 
 
 @app.put("/api/agents/{agent_id}")
-def update_agent(agent_id: str, agent: dict[str, Any]):
+def update_agent(agent_id: str, agent: dict[str, Any], request: Request):
+    existing = store.get_item("agents", agent_id)
+    groups, admin = identity.resolve_access(request)
+    if not existing or not identity.can_see(existing, groups, admin):
+        raise HTTPException(404, "Agent not found")
     agent["id"] = agent_id
+    agent.setdefault("visible_to_groups", existing.get("visible_to_groups", []))
     return store.upsert_item("agents", agent)
 
 
 @app.delete("/api/agents/{agent_id}")
-def delete_agent(agent_id: str):
-    if not store.delete_item("agents", agent_id):
+def delete_agent(agent_id: str, request: Request):
+    existing = store.get_item("agents", agent_id)
+    groups, admin = identity.resolve_access(request)
+    if not existing or not identity.can_see(existing, groups, admin):
         raise HTTPException(404, "Agent not found")
+    store.delete_item("agents", agent_id)
     return {"deleted": agent_id}
 
 
@@ -106,9 +135,10 @@ class RunRequest(BaseModel):
 
 
 @app.post("/api/agents/{agent_id}/run")
-def run(agent_id: str, body: RunRequest):
+def run(agent_id: str, body: RunRequest, request: Request):
     agent = store.get_item("agents", agent_id)
-    if not agent:
+    groups, admin = identity.resolve_access(request)
+    if not agent or not identity.can_see(agent, groups, admin):
         raise HTTPException(404, "Agent not found")
     tool_ids = agent.get("tools", [])
     all_tools = {t["id"]: t for t in store.read("tools")}
@@ -117,8 +147,9 @@ def run(agent_id: str, body: RunRequest):
         raise HTTPException(400, f"Agent references tools that no longer exist: {', '.join(missing)}")
     tools_config = [all_tools[tid] for tid in tool_ids]
 
+    caller = identity.get_caller(request)
     try:
-        record = run_agent(agent, tools_config, body.question)
+        record = run_agent(agent, tools_config, body.question, obo_token=caller.access_token, caller_email=caller.email)
     except AgentError as exc:
         raise HTTPException(400, str(exc))
     store.append_item("runs", record)
@@ -126,7 +157,11 @@ def run(agent_id: str, body: RunRequest):
 
 
 @app.get("/api/agents/{agent_id}/runs")
-def agent_runs(agent_id: str):
+def agent_runs(agent_id: str, request: Request):
+    agent = store.get_item("agents", agent_id)
+    groups, admin = identity.resolve_access(request)
+    if not agent or not identity.can_see(agent, groups, admin):
+        raise HTTPException(404, "Agent not found")
     return [r for r in store.read("runs") if r["agent_id"] == agent_id]
 
 
