@@ -109,6 +109,13 @@ function renderAgentDetail(agent, runs) {
         : `<p class="hint">No tools attached — this agent can only think, not act.</p>`
     }
 
+    <div class="section-title">Visible to</div>
+    <p class="hint" style="margin:0;">${
+      (agent.visible_to_groups || []).length
+        ? `Restricted to: ${agent.visible_to_groups.map(escapeHtml).join(", ")}`
+        : "Everyone in this workspace (no restriction set)"
+    }</p>
+
     <div class="section-title">Ask this agent</div>
     <div style="display:flex;gap:10px;">
       <input type="text" id="run-question" placeholder="Ask a question..." style="flex:1;">

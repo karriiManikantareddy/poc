@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "name": "get_ticket_summary",
+    "description": "Returns the real count of tickets grouped by status, across all projects",
+    "code": "def get_ticket_summary() -> str:\n    warehouse_id = next(w.warehouses.list()).id\n    resp = w.statement_execution.execute_statement(\n        statement=\"SELECT status, COUNT(*) AS ticket_count FROM workspace.default.tickets GROUP BY status ORDER BY ticket_count DESC\",\n        warehouse_id=warehouse_id,\n        wait_timeout=\"30s\",\n    )\n    if resp.status and resp.status.state.value == \"FAILED\":\n        message = resp.status.error.message if resp.status.error else \"unknown error\"\n        return f\"Could not query tickets: {message}\"\n    rows = resp.result.data_array if resp.result else []\n    if not rows:\n        return \"No tickets found.\"\n    return chr(10).join(f\"{status}: {count} tickets\" for status, count in rows)\n",
+    "id": "tool-b5b6c9f1"
+  },
+  {
+    "name": "get_project_tickets",
+    "description": "Returns ticket counts by status for one specific project, given its exact name",
+    "code": "def get_project_tickets(project_name: str) -> str:\n    from databricks.sdk.service.sql import StatementParameterListItem\n    warehouse_id = next(w.warehouses.list()).id\n    resp = w.statement_execution.execute_statement(\n        statement=\"SELECT status, COUNT(*) AS ticket_count FROM workspace.default.tickets WHERE project_name = :project_name GROUP BY status ORDER BY ticket_count DESC\",\n        warehouse_id=warehouse_id,\n        parameters=[StatementParameterListItem(name=\"project_name\", value=project_name)],\n        wait_timeout=\"30s\",\n    )\n    if resp.status and resp.status.state.value == \"FAILED\":\n        message = resp.status.error.message if resp.status.error else \"unknown error\"\n        return f\"Could not query project: {message}\"\n    rows = resp.result.data_array if resp.result else []\n    if not rows:\n        return f\"No tickets found for project '{project_name}'.\"\n    return chr(10).join(f\"{status}: {count} tickets\" for status, count in rows)\n",
+    "id": "tool-a08c9b45"
+  }
+]
