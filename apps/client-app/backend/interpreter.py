@@ -162,6 +162,17 @@ def run_agent(
             final_answer = msg.content
             break
 
+    if not obo_token:
+        ran_as = "app identity (no OBO token forwarded)"
+    elif llm.last_call_was_obo:
+        ran_as = f"employee ({caller_email}) — model + tools"
+    else:
+        # Real, current platform gap, not a bug: Databricks Apps can't
+        # declare the "model-serving-inference" scope an OBO'd model call
+        # needs, so that leg falls back to the app's own identity while
+        # tools (SQL etc.) still run as the employee for real.
+        ran_as = f"employee ({caller_email}) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+
     return {
         "id": f"run-{uuid.uuid4().hex[:8]}",
         "agent_id": agent["id"],
@@ -169,5 +180,5 @@ def run_agent(
         "answer": final_answer,
         "trace": final_state["trace"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "ran_as": f"employee ({caller_email})" if obo_token and caller_email else "app identity (no OBO token forwarded)",
+        "ran_as": ran_as,
     }

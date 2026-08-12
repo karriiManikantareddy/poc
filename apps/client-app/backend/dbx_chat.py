@@ -46,17 +46,24 @@ def _to_openai_message(message: BaseMessage) -> dict[str, Any]:
 class DatabricksEndpointChat(BaseChatModel):
     """Calls a real serving endpoint in the workspace this app is deployed to.
 
-    When `obo_token` is set (the caller's own forwarded X-Forwarded-Access-Token,
-    requires `serving.serving-endpoints` in this app's user_api_scopes — see
-    databricks.yml), the call runs AS that employee, not as the app's own
-    identity — so their own model-serving permissions/quotas apply, not the
-    app's. Falls back to the app's own identity when no token is available
-    (e.g. local dev with no reverse proxy in front)."""
+    When `obo_token` is set, this tries to run the call AS that employee
+    first. Confirmed by testing against a live deployment: Databricks Apps
+    can only declare "model-serving" in user_api_scopes, but the real
+    /invocations route demands "model-serving, model-serving-inference"
+    together, and "model-serving-inference" is rejected outright as an
+    invalid scope if you try to declare it. So an OBO'd inference call
+    currently always 403s with insufficient scopes — a real platform gap,
+    not something fixable from this app's code. Rather than hard-failing
+    the whole agent run over it, this falls back to the app's own identity
+    for the model call specifically, and reports that honestly via
+    `last_call_was_obo` so the run record doesn't overclaim per-employee
+    scoping it can't currently deliver for this one leg."""
 
     endpoint: str
     temperature: float = 0.2
     max_tokens: int = 1024
     obo_token: Optional[str] = None
+    last_call_was_obo: bool = False
 
     @property
     def _llm_type(self) -> str:
@@ -66,15 +73,12 @@ class DatabricksEndpointChat(BaseChatModel):
         formatted = [convert_to_openai_tool(t) for t in tools]
         return self.bind(tools=formatted, **kwargs)
 
-    def _generate(self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs: Any) -> ChatResult:
-        # auth_type="pat" is required: without it, Config also picks up this
-        # app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and refuses
-        # to proceed with "more than one authorization method configured" —
-        # hit this for real building the group-lookup path, fixed here too.
-        cfg = Config(token=self.obo_token, auth_type="pat") if self.obo_token else Config()
+    def _call_endpoint(self, cfg: Config, payload: dict[str, Any]):
         headers = cfg.authenticate()
         url = f"{cfg.host}/serving-endpoints/{self.endpoint}/invocations"
+        return requests.post(url, headers=headers, json=payload, timeout=60)
 
+    def _generate(self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs: Any) -> ChatResult:
         payload: dict[str, Any] = {
             "messages": [_to_openai_message(m) for m in messages],
             "temperature": self.temperature,
@@ -83,7 +87,22 @@ class DatabricksEndpointChat(BaseChatModel):
         if kwargs.get("tools"):
             payload["tools"] = kwargs["tools"]
 
-        resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        resp = None
+        if self.obo_token:
+            # auth_type="pat" is required: without it, Config also picks up
+            # this app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and
+            # refuses to proceed with "more than one authorization method
+            # configured" — a real error hit building this, fixed here too.
+            obo_cfg = Config(token=self.obo_token, auth_type="pat")
+            resp = self._call_endpoint(obo_cfg, payload)
+            if resp.status_code == 403 and "required scopes" in resp.text:
+                resp = None  # known platform gap — fall back below, don't surface this as a failure
+            else:
+                self.last_call_was_obo = True
+        if resp is None:
+            resp = self._call_endpoint(Config(), payload)
+            self.last_call_was_obo = False
+
         if not resp.ok:
             raise RuntimeError(f"Serving endpoint '{self.endpoint}' returned {resp.status_code}: {resp.text}")
 
