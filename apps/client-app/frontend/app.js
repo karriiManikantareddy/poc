@@ -314,10 +314,40 @@ async function loadConnections() {
 
 document.getElementById("refresh-connections-btn").addEventListener("click", loadConnections);
 
+let priorConnectionNames = new Set();
+let cnPollTimer = null;
+
+function stopConnectionPoll() {
+  if (cnPollTimer) {
+    clearInterval(cnPollTimer);
+    cnPollTimer = null;
+  }
+}
+
+function startConnectionPoll(expectedType) {
+  stopConnectionPoll();
+  cnPollTimer = setInterval(async () => {
+    let items;
+    try {
+      items = await api("GET", "/connections");
+    } catch {
+      return; // transient error while polling — just try again next tick
+    }
+    const found = items.find((c) => !priorConnectionNames.has(c.name) && c.connection_type === expectedType);
+    if (found) {
+      stopConnectionPoll();
+      const area = document.getElementById("cn-form-area");
+      area.innerHTML = `<div class="msg-ok" style="margin-top:12px;">Found it — <strong>${escapeHtml(found.name)}</strong> is ready to use. You can close this and create an ingestion pipeline with it.</div>`;
+      loadConnections();
+    }
+  }, 4000);
+}
+
 document.getElementById("new-connection-btn").addEventListener("click", async () => {
   document.getElementById("cn-name").value = "";
   document.getElementById("cn-form-area").innerHTML = "";
   feedback(document.getElementById("cn-modal-feedback"), "", "");
+  stopConnectionPoll();
   const typeSelect = document.getElementById("cn-type");
   typeSelect.innerHTML = `<option value="">Loading types...</option>`;
   document.getElementById("connection-modal").hidden = false;
@@ -329,12 +359,18 @@ document.getElementById("new-connection-btn").addEventListener("click", async ()
   } catch (e) {
     typeSelect.innerHTML = `<option value="">Could not load types: ${escapeHtml(e.message)}</option>`;
   }
+  try {
+    priorConnectionNames = new Set((await api("GET", "/connections")).map((c) => c.name));
+  } catch {
+    priorConnectionNames = new Set();
+  }
 });
 
 document.getElementById("cn-type").addEventListener("change", () => {
   const type = document.getElementById("cn-type").value;
   const info = connectorTypes.find((t) => t.type === type);
   const area = document.getElementById("cn-form-area");
+  stopConnectionPoll();
   if (!info) {
     area.innerHTML = "";
   } else if (info.form === "host") {
@@ -346,15 +382,17 @@ document.getElementById("cn-type").addEventListener("change", () => {
       .join("");
   } else {
     area.innerHTML = `<div class="msg-pending" style="margin-top:12px;">
-      This source needs an OAuth sign-in Databricks doesn't expose an API for.
+      This source needs an OAuth sign-in Databricks doesn't expose an API for — that step has to happen on Databricks' own page.
       In your Databricks workspace: <strong>Catalog</strong> &rarr; gear icon &rarr; <strong>Connections</strong> &rarr; <strong>Create connection</strong>,
-      pick <strong>${escapeHtml(type)}</strong>, and sign in. Then come back and click "Refresh from workspace" — it'll appear below,
-      ready to use in an ingestion pipeline.
+      pick <strong>${escapeHtml(type)}</strong>, and sign in. Leave this open — it'll detect the new connection automatically and update below,
+      no need to click Refresh yourself.
     </div>`;
+    startConnectionPoll(type);
   }
 });
 
 document.getElementById("connection-modal-cancel").addEventListener("click", () => {
+  stopConnectionPoll();
   document.getElementById("connection-modal").hidden = true;
 });
 
