@@ -2,12 +2,14 @@
 
 This is the one Databricks App deployed into each client's own workspace.
 Page 2 defines four modules in its UI: Connectors | LLM Providers | Agents |
-Access Control. Of those, the Agents module here is real end to end — the
-Generic Agent Interpreter (interpreter.py) genuinely compiles and runs each
-agent's own LangGraph flow, calling this workspace's real Foundation Model
-serving endpoints via LangChain. Connectors, LLM Providers (as a management
-surface), and Access Control are not built yet; their tabs say so honestly
-in the UI rather than showing invented data.
+Access Control. The Agents module is real end to end — the Generic Agent
+Interpreter (interpreter.py) genuinely compiles and runs each agent's own
+LangGraph flow, calling this workspace's real Foundation Model serving
+endpoints via LangChain. The Connectors module (connectors.py) is also
+real — genuine Unity Catalog Connection + Lakeflow ingestion Pipeline
+objects via databricks-sdk, no sync engine of our own. LLM Providers (as a
+management surface) and Access Control are not built yet; their tabs say
+so honestly in the UI rather than showing invented data.
 
 Local dev:
     uvicorn main:app --port 8200 --app-dir backend
@@ -25,7 +27,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import connectors
 import store
+from connectors import ConnectorError
 from interpreter import AgentError, run_agent
 
 app = FastAPI(title="Client App — Agents Module POC")
@@ -143,6 +147,150 @@ def delete_tool(tool_id: str):
     if not store.delete_item("tools", tool_id):
         raise HTTPException(404, "Tool not found")
     return {"deleted": tool_id}
+
+
+# ---------- Connectors (real — architecture.drawio page 2, Lakeflow Connect) ----------
+
+@app.get("/api/connector-types")
+def connector_types():
+    """Every real connection type this SDK knows about, not a curated list."""
+    try:
+        return connectors.list_connection_types()
+    except ConnectorError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.get("/api/connections")
+def connections():
+    """Live Unity Catalog Connections in this workspace right now — not
+    scoped to ones this app created, since Connections are a shared,
+    governed UC object other tools may also create or reuse."""
+    try:
+        return connectors.list_connections()
+    except ConnectorError as exc:
+        raise HTTPException(502, str(exc))
+
+
+class CreateConnectionRequest(BaseModel):
+    name: str
+    connection_type: str
+    fields: dict[str, str]
+    comment: str = ""
+
+
+@app.post("/api/connections")
+def create_connection(body: CreateConnectionRequest):
+    try:
+        return connectors.create_host_connection(body.name, body.connection_type, body.fields, body.comment)
+    except ConnectorError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.delete("/api/connections/{name}")
+def delete_connection(name: str):
+    try:
+        connectors.delete_connection(name)
+    except ConnectorError as exc:
+        raise HTTPException(400, str(exc))
+    return {"deleted": name}
+
+
+@app.get("/api/catalogs")
+def catalogs():
+    try:
+        return connectors.list_catalogs()
+    except ConnectorError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.get("/api/catalogs/{catalog}/schemas")
+def schemas(catalog: str):
+    try:
+        return connectors.list_schemas(catalog)
+    except ConnectorError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.get("/api/connectors")
+def list_connectors():
+    """Ingestion pipelines created through this tab. Scoped to our own
+    pointer records (connector_links) since a workspace may have many
+    Lakeflow pipelines unrelated to this app; status is always re-fetched
+    live, never cached, so a pipeline deleted outside this app shows up
+    honestly as gone instead of silently staying in a stale 'connected' state."""
+    links = store.read("connector_links")
+    result = []
+    for link in links:
+        try:
+            status = connectors.get_pipeline_status(link["pipeline_id"])
+        except ConnectorError:
+            status = {"state": "NOT_FOUND", "last_update_state": None}
+        result.append({**link, **status})
+    return result
+
+
+class CreateConnectorRequest(BaseModel):
+    label: str
+    connection_name: str
+    destination_catalog: str
+    destination_schema: str
+    sync_mode: str  # "schema" | "tables"
+    source_schema: str
+    tables: list[str] = []
+    schedule_cron: str = ""
+
+
+@app.post("/api/connectors")
+def create_connector(body: CreateConnectorRequest):
+    try:
+        result = connectors.create_ingestion_pipeline(
+            name=f"connector-{body.label}",
+            connection_name=body.connection_name,
+            destination_catalog=body.destination_catalog,
+            destination_schema=body.destination_schema,
+            sync_mode=body.sync_mode,
+            source_schema=body.source_schema,
+            tables=body.tables,
+            schedule_cron=body.schedule_cron or None,
+        )
+    except ConnectorError as exc:
+        raise HTTPException(400, str(exc))
+
+    link = {
+        "id": f"connector-{uuid.uuid4().hex[:8]}",
+        "label": body.label,
+        "connection_name": body.connection_name,
+        "pipeline_id": result["pipeline_id"],
+        "destination_catalog": body.destination_catalog,
+        "destination_schema": body.destination_schema,
+        "created_at": now(),
+    }
+    store.append_item("connector_links", link)
+    return link
+
+
+@app.post("/api/connectors/{connector_id}/run")
+def run_connector(connector_id: str):
+    link = store.get_item("connector_links", connector_id)
+    if not link:
+        raise HTTPException(404, "Connector not found")
+    try:
+        return connectors.start_pipeline_update(link["pipeline_id"])
+    except ConnectorError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.delete("/api/connectors/{connector_id}")
+def delete_connector(connector_id: str):
+    link = store.get_item("connector_links", connector_id)
+    if not link:
+        raise HTTPException(404, "Connector not found")
+    try:
+        connectors.delete_pipeline(link["pipeline_id"])
+    except ConnectorError as exc:
+        raise HTTPException(400, str(exc))
+    store.delete_item("connector_links", connector_id)
+    return {"deleted": connector_id}
 
 
 # ---------- static frontend ----------

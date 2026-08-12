@@ -30,12 +30,18 @@ function feedback(el, kind, html) {
 }
 
 // ---------------- tab switching ----------------
+let connectorsTabLoaded = false;
 document.querySelectorAll("nav.side .item").forEach((el) => {
   el.addEventListener("click", () => {
     document.querySelectorAll("nav.side .item").forEach((n) => n.classList.remove("active"));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
     el.classList.add("active");
     document.getElementById(`tab-${el.dataset.tab}`).classList.add("active");
+    if (el.dataset.tab === "connectors" && !connectorsTabLoaded) {
+      connectorsTabLoaded = true;
+      loadConnections();
+      loadConnectors();
+    }
   });
 });
 
@@ -257,6 +263,275 @@ document.getElementById("tool-modal-save").addEventListener("click", async () =>
   document.getElementById("tool-modal").hidden = true;
   await loadTools();
   renderToolCheckboxes(Array.from(document.querySelectorAll(".ag-tool-checkbox:checked")).map((el) => el.value));
+});
+
+// ---------------- CONNECTORS ----------------
+let connectorTypes = [];
+
+async function loadConnectorTypes() {
+  if (connectorTypes.length) return connectorTypes;
+  connectorTypes = await api("GET", "/connector-types");
+  return connectorTypes;
+}
+
+async function loadConnections() {
+  const listEl = document.getElementById("connections-list");
+  listEl.innerHTML = `<p class="hint">Loading...</p>`;
+  try {
+    const items = await api("GET", "/connections");
+    if (!items.length) {
+      listEl.innerHTML = `<p class="hint">No connections yet in this workspace.</p>`;
+      return;
+    }
+    listEl.innerHTML = `<table>
+      <thead><tr><th>Name</th><th>Type</th><th>Owner</th><th></th></tr></thead>
+      <tbody>${items
+        .map(
+          (c) => `<tr>
+            <td>${escapeHtml(c.name)}</td>
+            <td>${escapeHtml(c.connection_type || "")}</td>
+            <td>${escapeHtml(c.owner || "")}</td>
+            <td><button class="btn danger small" data-name="${escapeHtml(c.name)}">Delete</button></td>
+          </tr>`
+        )
+        .join("")}</tbody>
+    </table>`;
+    listEl.querySelectorAll("button[data-name]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm(`Delete connection "${btn.dataset.name}"? Any pipeline using it will start failing.`)) return;
+        try {
+          await api("DELETE", `/connections/${encodeURIComponent(btn.dataset.name)}`, undefined);
+          await loadConnections();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    });
+  } catch (e) {
+    listEl.innerHTML = `<div class="msg-err">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+document.getElementById("refresh-connections-btn").addEventListener("click", loadConnections);
+
+document.getElementById("new-connection-btn").addEventListener("click", async () => {
+  document.getElementById("cn-name").value = "";
+  document.getElementById("cn-form-area").innerHTML = "";
+  feedback(document.getElementById("cn-modal-feedback"), "", "");
+  const typeSelect = document.getElementById("cn-type");
+  typeSelect.innerHTML = `<option value="">Loading types...</option>`;
+  document.getElementById("connection-modal").hidden = false;
+  try {
+    const types = await loadConnectorTypes();
+    typeSelect.innerHTML =
+      `<option value="">Select a source type...</option>` +
+      types.map((t) => `<option value="${escapeHtml(t.type)}">${escapeHtml(t.type)}${t.form === "external" ? " (finish in Databricks)" : ""}</option>`).join("");
+  } catch (e) {
+    typeSelect.innerHTML = `<option value="">Could not load types: ${escapeHtml(e.message)}</option>`;
+  }
+});
+
+document.getElementById("cn-type").addEventListener("change", () => {
+  const type = document.getElementById("cn-type").value;
+  const info = connectorTypes.find((t) => t.type === type);
+  const area = document.getElementById("cn-form-area");
+  if (!info) {
+    area.innerHTML = "";
+  } else if (info.form === "host") {
+    area.innerHTML = info.fields
+      .map(
+        (f) =>
+          `<label for="cn-field-${f}">${f}</label><input type="${f === "password" ? "password" : "text"}" id="cn-field-${f}" placeholder="${f}">`
+      )
+      .join("");
+  } else {
+    area.innerHTML = `<div class="msg-pending" style="margin-top:12px;">
+      This source needs an OAuth sign-in Databricks doesn't expose an API for.
+      In your Databricks workspace: <strong>Catalog</strong> &rarr; gear icon &rarr; <strong>Connections</strong> &rarr; <strong>Create connection</strong>,
+      pick <strong>${escapeHtml(type)}</strong>, and sign in. Then come back and click "Refresh from workspace" — it'll appear below,
+      ready to use in an ingestion pipeline.
+    </div>`;
+  }
+});
+
+document.getElementById("connection-modal-cancel").addEventListener("click", () => {
+  document.getElementById("connection-modal").hidden = true;
+});
+
+document.getElementById("connection-modal-save").addEventListener("click", async () => {
+  const name = document.getElementById("cn-name").value.trim();
+  const type = document.getElementById("cn-type").value;
+  const info = connectorTypes.find((t) => t.type === type);
+  const resultEl = document.getElementById("cn-modal-feedback");
+  if (!name || !type) return;
+  if (!info || info.form !== "host") {
+    feedback(resultEl, "err", "This source type must be created in Databricks first — see the instructions above.");
+    return;
+  }
+  const fields = {};
+  info.fields.forEach((f) => {
+    fields[f] = document.getElementById(`cn-field-${f}`).value;
+  });
+  feedback(resultEl, "pending", "Creating...");
+  try {
+    await api("POST", "/connections", { name, connection_type: type, fields });
+    document.getElementById("connection-modal").hidden = true;
+    await loadConnections();
+  } catch (e) {
+    feedback(resultEl, "err", escapeHtml(e.message));
+  }
+});
+
+async function loadConnectors() {
+  const listEl = document.getElementById("connectors-list");
+  listEl.innerHTML = `<p class="hint">Loading...</p>`;
+  try {
+    const items = await api("GET", "/connectors");
+    if (!items.length) {
+      listEl.innerHTML = `<p class="hint">No ingestion pipelines yet — click "+ New Ingestion Pipeline" to create one.</p>`;
+      return;
+    }
+    listEl.innerHTML = `<table>
+      <thead><tr><th>Label</th><th>Connection</th><th>Destination</th><th>State</th><th>Last run</th><th></th></tr></thead>
+      <tbody>${items
+        .map(
+          (c) => `<tr>
+            <td>${escapeHtml(c.label)}</td>
+            <td>${escapeHtml(c.connection_name)}</td>
+            <td>${escapeHtml(c.destination_catalog)}.${escapeHtml(c.destination_schema)}</td>
+            <td>${escapeHtml(c.state || "unknown")}</td>
+            <td>${escapeHtml(c.last_update_state || "never run")}</td>
+            <td style="display:flex;gap:6px;">
+              <button class="btn secondary small" data-run="${escapeHtml(c.id)}">Run now</button>
+              <button class="btn danger small" data-del="${escapeHtml(c.id)}">Delete</button>
+            </td>
+          </tr>`
+        )
+        .join("")}</tbody>
+    </table>`;
+    listEl.querySelectorAll("button[data-run]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await api("POST", `/connectors/${btn.dataset.run}/run`, {});
+          await loadConnectors();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+    listEl.querySelectorAll("button[data-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this ingestion pipeline? This does not delete already-synced data.")) return;
+        try {
+          await api("DELETE", `/connectors/${btn.dataset.del}`, undefined);
+          await loadConnectors();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    });
+  } catch (e) {
+    listEl.innerHTML = `<div class="msg-err">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+document.getElementById("new-connector-btn").addEventListener("click", async () => {
+  document.getElementById("cc-label").value = "";
+  document.getElementById("cc-source-schema").value = "";
+  document.getElementById("cc-tables").value = "";
+  document.getElementById("cc-cron").value = "";
+  document.getElementById("cc-sync-mode").value = "schema";
+  document.getElementById("cc-tables-area").style.display = "none";
+  feedback(document.getElementById("cc-modal-feedback"), "", "");
+
+  const connSelect = document.getElementById("cc-connection");
+  connSelect.innerHTML = `<option value="">Loading connections...</option>`;
+  const catSelect = document.getElementById("cc-catalog");
+  catSelect.innerHTML = `<option value="">Loading catalogs...</option>`;
+  document.getElementById("cc-schema").innerHTML = `<option value="">Pick a catalog first</option>`;
+
+  document.getElementById("connector-modal").hidden = false;
+
+  try {
+    const conns = await api("GET", "/connections");
+    connSelect.innerHTML = conns.length
+      ? `<option value="">Select a connection...</option>` + conns.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)} (${escapeHtml(c.connection_type)})</option>`).join("")
+      : `<option value="">No connections yet — create one first</option>`;
+  } catch (e) {
+    connSelect.innerHTML = `<option value="">Could not load: ${escapeHtml(e.message)}</option>`;
+  }
+
+  try {
+    const cats = await api("GET", "/catalogs");
+    catSelect.innerHTML = `<option value="">Select a catalog...</option>` + cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  } catch (e) {
+    catSelect.innerHTML = `<option value="">Could not load: ${escapeHtml(e.message)}</option>`;
+  }
+});
+
+document.getElementById("cc-sync-mode").addEventListener("change", (e) => {
+  document.getElementById("cc-tables-area").style.display = e.target.value === "tables" ? "block" : "none";
+});
+
+document.getElementById("cc-catalog").addEventListener("change", async () => {
+  const catalog = document.getElementById("cc-catalog").value;
+  const schemaSelect = document.getElementById("cc-schema");
+  if (!catalog) {
+    schemaSelect.innerHTML = `<option value="">Pick a catalog first</option>`;
+    return;
+  }
+  schemaSelect.innerHTML = `<option value="">Loading schemas...</option>`;
+  try {
+    const schemas = await api("GET", `/catalogs/${encodeURIComponent(catalog)}/schemas`);
+    schemaSelect.innerHTML = `<option value="">Select a schema...</option>` + schemas.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  } catch (e) {
+    schemaSelect.innerHTML = `<option value="">Could not load: ${escapeHtml(e.message)}</option>`;
+  }
+});
+
+document.getElementById("connector-modal-cancel").addEventListener("click", () => {
+  document.getElementById("connector-modal").hidden = true;
+});
+
+document.getElementById("connector-modal-save").addEventListener("click", async () => {
+  const resultEl = document.getElementById("cc-modal-feedback");
+  const label = document.getElementById("cc-label").value.trim();
+  const connection_name = document.getElementById("cc-connection").value;
+  const source_schema = document.getElementById("cc-source-schema").value.trim();
+  const sync_mode = document.getElementById("cc-sync-mode").value;
+  const destination_catalog = document.getElementById("cc-catalog").value;
+  const destination_schema = document.getElementById("cc-schema").value;
+  const schedule_cron = document.getElementById("cc-cron").value.trim();
+  const tables = document.getElementById("cc-tables").value.split(",").map((t) => t.trim()).filter(Boolean);
+
+  if (!label || !connection_name || !source_schema || !destination_catalog || !destination_schema) {
+    feedback(resultEl, "err", "Fill in label, connection, source schema, and destination catalog/schema.");
+    return;
+  }
+  if (sync_mode === "tables" && !tables.length) {
+    feedback(resultEl, "err", "List at least one table, or switch to 'Entire schema'.");
+    return;
+  }
+
+  feedback(resultEl, "pending", "Creating pipeline...");
+  try {
+    await api("POST", "/connectors", {
+      label,
+      connection_name,
+      destination_catalog,
+      destination_schema,
+      sync_mode,
+      source_schema,
+      tables,
+      schedule_cron,
+    });
+    document.getElementById("connector-modal").hidden = true;
+    await loadConnectors();
+  } catch (e) {
+    feedback(resultEl, "err", escapeHtml(e.message));
+  }
 });
 
 // ---------------- init ----------------

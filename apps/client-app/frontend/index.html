@@ -36,17 +36,28 @@
   </nav>
 
   <main>
-    <!-- CONNECTORS (not built yet) -->
+    <!-- CONNECTORS (real) -->
     <section id="tab-connectors" class="tab-panel">
       <div class="page-head">
         <h1>Connectors</h1>
-        <p class="page-sub">Connect Salesforce, ServiceNow, SQL Server, HubSpot, and other sources via Lakeflow Connect.</p>
+        <p class="page-sub">Real Unity Catalog Connections and Lakeflow Connect ingestion pipelines — this app doesn't sync data itself, it configures Databricks's own connectors.</p>
       </div>
-      <div class="card">
-        <div class="empty-state" style="height:280px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          <p><strong>Not built yet.</strong> This module will let you connect real sources through Lakeflow Connect. Nothing here is functional — there's intentionally no sample data.</p>
+
+      <div class="section-title">Connections <span style="font-weight:400;text-transform:none;letter-spacing:0;">— credentials to a source, governed by Unity Catalog</span></div>
+      <div class="card" style="margin-bottom:var(--sp-6);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <button class="btn secondary small" id="refresh-connections-btn">Refresh from workspace</button>
+          <button class="btn" id="new-connection-btn">+ New Connection</button>
         </div>
+        <div id="connections-list"></div>
+      </div>
+
+      <div class="section-title">Ingestion Pipelines <span style="font-weight:400;text-transform:none;letter-spacing:0;">— what to sync, where, and on what schedule</span></div>
+      <div class="card">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+          <button class="btn" id="new-connector-btn">+ New Ingestion Pipeline</button>
+        </div>
+        <div id="connectors-list"></div>
       </div>
     </section>
 
@@ -115,6 +126,56 @@
     <div class="modal-actions" style="margin-top:16px;">
       <button class="btn secondary" id="agent-modal-cancel">Cancel</button>
       <button class="btn" id="agent-modal-save">Save Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Connection modal -->
+<div id="connection-modal" class="modal-overlay" hidden>
+  <div class="modal-card" style="width:520px;max-height:85vh;overflow-y:auto;">
+    <div class="modal-title">New Connection</div>
+    <label for="cn-name">Connection name</label>
+    <input type="text" id="cn-name" placeholder="my-postgres-source">
+    <label for="cn-type">Source type (this workspace's real connector list)</label>
+    <select id="cn-type"><option value="">Loading types...</option></select>
+    <div id="cn-form-area"></div>
+    <div id="cn-modal-feedback" class="feedback"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn secondary" id="connection-modal-cancel">Cancel</button>
+      <button class="btn" id="connection-modal-save">Create Connection</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Ingestion Pipeline modal -->
+<div id="connector-modal" class="modal-overlay" hidden>
+  <div class="modal-card" style="width:560px;max-height:85vh;overflow-y:auto;">
+    <div class="modal-title">New Ingestion Pipeline</div>
+    <label for="cc-label">Label</label>
+    <input type="text" id="cc-label" placeholder="salesforce-accounts">
+    <label for="cc-connection">Connection to use</label>
+    <select id="cc-connection"><option value="">Loading connections...</option></select>
+    <label for="cc-source-schema">Source schema (as it exists at the source — Databricks can't browse this until the connection is used, so type it exactly)</label>
+    <input type="text" id="cc-source-schema" placeholder="public">
+    <label for="cc-sync-mode">What to sync</label>
+    <select id="cc-sync-mode">
+      <option value="schema">Entire schema</option>
+      <option value="tables">Specific tables</option>
+    </select>
+    <div id="cc-tables-area" style="display:none;">
+      <label for="cc-tables">Table names (comma-separated, exactly as they exist at the source)</label>
+      <input type="text" id="cc-tables" placeholder="customers, orders">
+    </div>
+    <label for="cc-catalog">Destination catalog (this workspace's real catalogs)</label>
+    <select id="cc-catalog"><option value="">Loading catalogs...</option></select>
+    <label for="cc-schema">Destination schema</label>
+    <select id="cc-schema"><option value="">Pick a catalog first</option></select>
+    <label for="cc-cron">Schedule (quartz cron, UTC — leave blank for manual/on-demand only)</label>
+    <input type="text" id="cc-cron" placeholder="0 0 * * * ?">
+    <div id="cc-modal-feedback" class="feedback"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn secondary" id="connector-modal-cancel">Cancel</button>
+      <button class="btn" id="connector-modal-save">Create Pipeline</button>
     </div>
   </div>
 </div>
