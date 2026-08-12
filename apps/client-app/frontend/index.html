@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client App</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-mark"></span>
+    <span class="brand-name">Client App</span>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="side">
+    <div class="item" data-tab="connectors">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span>Connectors</span>
+    </div>
+    <div class="item" data-tab="llm">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h.01M15 9h.01M9 15h6"/></svg>
+      <span>LLM Providers</span>
+    </div>
+    <div class="item active" data-tab="agents">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
+      <span>Agents</span>
+    </div>
+    <div class="item" data-tab="access">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>Access Control</span>
+    </div>
+  </nav>
+
+  <main>
+    <!-- CONNECTORS (not built yet) -->
+    <section id="tab-connectors" class="tab-panel">
+      <div class="page-head">
+        <h1>Connectors</h1>
+        <p class="page-sub">Connect Salesforce, ServiceNow, SQL Server, HubSpot, and other sources via Lakeflow Connect.</p>
+      </div>
+      <div class="card">
+        <div class="empty-state" style="height:280px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <p><strong>Not built yet.</strong> This module will let you connect real sources through Lakeflow Connect. Nothing here is functional — there's intentionally no sample data.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- LLM PROVIDERS (not built yet) -->
+    <section id="tab-llm" class="tab-panel">
+      <div class="page-head">
+        <h1>LLM Providers</h1>
+        <p class="page-sub">Manage Foundation Model access and external providers (OpenAI, Anthropic, Gemini) via AI Gateway.</p>
+      </div>
+      <div class="card">
+        <div class="empty-state" style="height:280px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h.01M15 9h.01M9 15h6"/></svg>
+          <p><strong>Not built yet.</strong> This module will manage external provider keys and AI Gateway routes. The Agents tab already talks to this workspace's real Foundation Model endpoints directly — that part doesn't wait on this tab.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- AGENTS (real) -->
+    <section id="tab-agents" class="tab-panel active">
+      <div class="page-head">
+        <h1>Agents</h1>
+        <p class="page-sub">One shared engine runs every agent below — each agent is just data (prompt, model, tools, flow) that the engine reads at run time.</p>
+      </div>
+      <div class="cols">
+        <div class="list-col">
+          <button class="btn" id="new-agent-btn" style="width:100%;justify-content:center;margin-bottom:10px;">+ New Agent</button>
+          <div id="agent-list"></div>
+        </div>
+        <div class="detail-col" id="agent-detail">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/></svg>
+            <p>Select an agent on the left, or create a new one.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACCESS CONTROL (not built yet) -->
+    <section id="tab-access" class="tab-panel">
+      <div class="page-head">
+        <h1>Access Control</h1>
+        <p class="page-sub">Map this workspace's own Groups to app roles, and inspect live Unity Catalog grants.</p>
+      </div>
+      <div class="card">
+        <div class="empty-state" style="height:280px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <p><strong>Not built yet.</strong> Every employee still gets correctly-scoped answers today — that's enforced by Unity Catalog grants and On-Behalf-Of, not by this module. This tab will add a UI for viewing/managing that.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Agent editor modal -->
+<div id="agent-modal" class="modal-overlay" hidden>
+  <div class="modal-card" style="width:640px;max-height:85vh;overflow-y:auto;">
+    <div class="modal-title" id="agent-modal-title">New Agent</div>
+    <label for="ag-name">Name</label>
+    <input type="text" id="ag-name" placeholder="Contract Review Assistant">
+    <label for="ag-prompt">System prompt</label>
+    <textarea id="ag-prompt" rows="4" placeholder="You are a helpful assistant that..."></textarea>
+    <label for="ag-model">Model (this workspace's live serving endpoints)</label>
+    <select id="ag-model"><option value="">Loading endpoints...</option></select>
+    <label for="ag-tools">Tools attached to this agent</label>
+    <div id="ag-tools-list" class="card" style="padding:10px;max-height:140px;overflow-y:auto;"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn secondary" id="agent-modal-cancel">Cancel</button>
+      <button class="btn" id="agent-modal-save">Save Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tool editor modal -->
+<div id="tool-modal" class="modal-overlay" hidden>
+  <div class="modal-card" style="width:560px;">
+    <div class="modal-title" id="tool-modal-title">New Tool (Action Pack)</div>
+    <label for="tl-name">Function name</label>
+    <input type="text" id="tl-name" placeholder="lookup_order_status">
+    <label for="tl-description">Description (tells the model when to use it)</label>
+    <input type="text" id="tl-description" placeholder="Looks up the current status of an order by ID">
+    <label for="tl-code">Python code — must define a function with the exact name above</label>
+    <textarea id="tl-code" rows="8" class="code-input" placeholder="def lookup_order_status(order_id: str) -> str:&#10;    return f'Order {order_id} is in transit'"></textarea>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn secondary" id="tool-modal-cancel">Cancel</button>
+      <button class="btn" id="tool-modal-save">Save Tool</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

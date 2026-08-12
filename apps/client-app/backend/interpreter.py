@@ -1,0 +1,143 @@
+"""Generic Agent Interpreter — architecture.drawio page 3, "How One Agent Runs".
+
+ONE engine, always on, shared by every agent. It never changes when a
+business user creates or edits an agent — it only ever reads that agent's
+own config (prompt, tools, model, flow graph) from the Agent Config Store
+(store.py) and compiles/runs it fresh with LangGraph. That data/engine split
+is exactly why publishing or editing an agent needs no redeploy.
+
+Step 3a "Think" calls a real Databricks Model Serving Foundation Model
+endpoint (see dbx_chat.py) — this app runs inside the client's own
+workspace as a Databricks App, so it has real, governed access to that
+workspace's own serving endpoints. Nothing here is a dummy/mocked model.
+
+Step 3b "Act" calls a tool. Tools are tenant-written Python functions
+(the "Action Pack" in the architecture). The real architecture governs
+these as Unity Catalog Functions; here they are exec()'d in-process, the
+same honest scoping-down documented in this project's README.
+"""
+import uuid
+from datetime import datetime, timezone
+from typing import Any, TypedDict
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import StructuredTool
+from langgraph.graph import END, START, StateGraph
+
+from dbx_chat import DatabricksEndpointChat
+
+MAX_STEPS = 8  # hard stop so a misconfigured loop can't run forever
+
+
+class AgentError(Exception):
+    """Raised for problems that are the agent config's fault, not a bug —
+    surfaced verbatim to the caller instead of being swallowed."""
+
+
+class RunState(TypedDict):
+    messages: list[Any]
+    trace: list[dict[str, Any]]
+    steps: int
+
+
+def get_llm(model_endpoint: str):
+    if not model_endpoint:
+        raise AgentError("This agent has no model selected — pick a serving endpoint before running it.")
+    try:
+        return DatabricksEndpointChat(endpoint=model_endpoint)
+    except Exception as exc:  # noqa: BLE001 - surfacing the SDK's own error message is the point
+        raise AgentError(f"Could not reach model serving endpoint '{model_endpoint}': {exc}") from exc
+
+
+def build_tool(tool_config: dict[str, Any]) -> StructuredTool:
+    """Turns a stored Action Pack entry into a real, callable LangChain tool."""
+    namespace: dict[str, Any] = {}
+    try:
+        exec(tool_config["code"], namespace)  # noqa: S102 - intentional, this IS the Action Pack execution model
+    except Exception as exc:  # noqa: BLE001
+        raise AgentError(f"Tool '{tool_config['name']}' has a code error: {exc}") from exc
+
+    fn = namespace.get(tool_config["name"])
+    if fn is None or not callable(fn):
+        raise AgentError(
+            f"Tool '{tool_config['name']}' code must define a function named exactly '{tool_config['name']}'."
+        )
+    return StructuredTool.from_function(
+        func=fn,
+        name=tool_config["name"],
+        description=tool_config.get("description", ""),
+    )
+
+
+def run_agent(agent: dict[str, Any], tools_config: list[dict[str, Any]], question: str) -> dict[str, Any]:
+    """Executes one agent's own flow end to end and returns a full trace —
+    this is the literal implementation of page 3's Steps 1-3."""
+    llm = get_llm(agent.get("model", ""))
+    tools = [build_tool(t) for t in tools_config]
+    llm_with_tools = llm.bind_tools(tools) if tools else llm
+    tools_by_name = {t.name: t for t in tools}
+
+    graph = StateGraph(RunState)
+
+    def think(state: RunState) -> RunState:
+        messages = state["messages"]
+        response = llm_with_tools.invoke(messages)
+        state["trace"].append({
+            "step": "think",
+            "content": response.content,
+            "tool_calls": [tc["name"] for tc in getattr(response, "tool_calls", [])],
+        })
+        return {"messages": messages + [response], "trace": state["trace"], "steps": state["steps"] + 1}
+
+    def act(state: RunState) -> RunState:
+        last = state["messages"][-1]
+        tool_messages = []
+        for call in last.tool_calls:
+            tool = tools_by_name.get(call["name"])
+            if tool is None:
+                result = f"Error: no tool named '{call['name']}' is attached to this agent."
+            else:
+                try:
+                    result = tool.invoke(call["args"])
+                except Exception as exc:  # noqa: BLE001 - the point is to show the agent its own tool's error
+                    result = f"Error running tool: {exc}"
+            state["trace"].append({"step": "act", "tool": call["name"], "args": call["args"], "result": str(result)})
+            tool_messages.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
+        return {"messages": state["messages"] + tool_messages, "trace": state["trace"], "steps": state["steps"] + 1}
+
+    def route(state: RunState) -> str:
+        if state["steps"] >= MAX_STEPS:
+            return END
+        last = state["messages"][-1]
+        return "act" if isinstance(last, AIMessage) and getattr(last, "tool_calls", None) else END
+
+    graph.add_node("think", think)
+    if tools:
+        graph.add_node("act", act)
+        graph.add_edge("act", "think")
+    graph.add_edge(START, "think")
+    graph.add_conditional_edges("think", route, {"act": "act", END: END} if tools else {END: END})
+
+    compiled = graph.compile()
+
+    initial: RunState = {
+        "messages": [SystemMessage(content=agent.get("prompt", "")), HumanMessage(content=question)],
+        "trace": [],
+        "steps": 0,
+    }
+    final_state = compiled.invoke(initial)
+
+    final_answer = ""
+    for msg in reversed(final_state["messages"]):
+        if isinstance(msg, AIMessage) and msg.content:
+            final_answer = msg.content
+            break
+
+    return {
+        "id": f"run-{uuid.uuid4().hex[:8]}",
+        "agent_id": agent["id"],
+        "question": question,
+        "answer": final_answer,
+        "trace": final_state["trace"],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }

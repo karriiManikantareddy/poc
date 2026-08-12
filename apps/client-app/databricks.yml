@@ -1,0 +1,17 @@
+bundle:
+  name: client-app
+
+resources:
+  apps:
+    client-app:
+      name: "client-app"
+      description: "Client App — Connectors, LLM Providers, Agents, Access Control (architecture.drawio page 2)"
+      source_code_path: .
+      # Foundation Model calls in this POC run as the app's own identity.
+      # Uncomment to run them as the logged-in employee instead (OBO):
+      # user_api_scopes:
+      #   - serving.serving-endpoints
+
+targets:
+  default:
+    default: true
