@@ -7,14 +7,16 @@ resources:
       name: "client-app"
       description: "Client App — Connectors, LLM Providers, Agents, Access Control (architecture.drawio page 2)"
       source_code_path: .
-      # Confirmed real by testing: without this, the forwarded user token
-      # (X-Forwarded-Access-Token) only carries iam.access-control:read and
-      # iam.current-user:read — not enough to run SQL or call a serving
-      # endpoint as the employee. These two scopes are what the Agents
-      # module's OBO path actually needs.
+      # Confirmed real by testing: without "sql", the forwarded user token
+      # only carries iam.access-control:read/iam.current-user:read - not
+      # enough to run SQL as the employee. "serving.serving-endpoints" was
+      # a wrong guess - it doesn't cover actually invoking a model; a real
+      # 403 from the live endpoint spelled out the two scopes it actually
+      # checks: model-serving and model-serving-inference.
       user_api_scopes:
         - sql
-        - serving.serving-endpoints
+        - model-serving
+        - model-serving-inference
 
 targets:
   default:
