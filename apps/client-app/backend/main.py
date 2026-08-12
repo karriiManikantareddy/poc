@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -38,6 +38,13 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# TEMPORARY — verifying whether X-Forwarded-* headers are spoofable before
+# building any access control on top of them. Remove once confirmed.
+@app.get("/api/_debug/whoami")
+def debug_whoami(request: Request):
+    return {k: v for k, v in request.headers.items() if k.lower().startswith("x-forwarded")}
 
 
 # ---------- Model endpoints (real, live from this workspace — US-6.1) ----------
