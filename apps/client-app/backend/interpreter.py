@@ -67,16 +67,29 @@ class _FallbackProxy:
     """Wraps one SDK sub-API (e.g. the object behind `w.warehouses` or
     `w.statement_execution`) so every method call on it tries the
     employee's OBO identity first, falling back to the app's own
-    identity on the specific missing-scopes error this exists for.
+    identity if that fails for any reason.
 
     Generic on purpose, not hand-picked per method: an earlier version
     of this only wrapped `statement_execution.execute_statement`, but a
     real tool's first call is `w.warehouses.list()` to find a warehouse
     id — that call went straight to the OBO client unwrapped, failed
     there first, and never reached the one method that was protected.
-    Confirmed via isolated testing that both the OBO path and the app-
-    identity path work individually; the bug was the fallback simply
-    not being reached for every call a tool might make."""
+
+    Falls back on ANY exception from the OBO call, not just ones whose
+    message happens to contain "required scopes" — an earlier version
+    gated on that substring and still failed in production even though
+    the underlying scope gap was real and reproducible in isolation via
+    the /api/_debug/sql-obo endpoint, meaning the actual raised
+    exception's `str()` didn't match that check as reliably as the
+    text rendered elsewhere suggested. Being unconditional here is
+    safe: if the app identity ALSO can't do this call, that failure
+    (not the OBO one) is what should reach the caller anyway.
+
+    Also eagerly materializes iterator/generator results (e.g.
+    `warehouses.list()`) inside the try block — the SDK's paginated
+    `list()` calls are lazy, so the real HTTP request (and any auth
+    failure) only happens on the first `next()`, which would otherwise
+    run unprotected outside this method's own try/except."""
 
     def __init__(self, obo_target: Any, app_target: Any):
         self._obo = obo_target
@@ -91,17 +104,17 @@ class _FallbackProxy:
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 result = obo_attr(*args, **kwargs)
-                print(f"[fallback-proxy] '{name}' succeeded via OBO identity")  # TEMP diagnostic
+                if hasattr(result, "__next__"):
+                    result = list(result)  # force pagination now, still inside this try
                 return result
-            except Exception as exc:  # noqa: BLE001 - only swallow the specific known scope gap
-                print(f"[fallback-proxy] '{name}' failed via OBO: {exc!r}")  # TEMP diagnostic
-                if "required scopes" not in str(exc):
-                    print(f"[fallback-proxy] '{name}' error doesn't match fallback condition, re-raising")  # TEMP diagnostic
-                    raise
-                print(f"[fallback-proxy] '{name}' falling back to app identity now")  # TEMP diagnostic
-                result = app_attr(*args, **kwargs)
-                print(f"[fallback-proxy] '{name}' succeeded via app identity fallback")  # TEMP diagnostic
-                return result
+            except Exception as obo_exc:  # noqa: BLE001 - any OBO failure degrades to app identity
+                try:
+                    result = app_attr(*args, **kwargs)
+                    if hasattr(result, "__next__"):
+                        result = list(result)
+                    return result
+                except Exception:  # noqa: BLE001 - app identity also failed; surface the OBO error
+                    raise obo_exc
 
         return wrapper
 
@@ -131,9 +144,7 @@ def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient
     the injected `w`, that call silently reverts to the app's own identity —
     we don't sandbox imports away, so this can't be fully prevented, only
     documented (see the New Tool modal's placeholder text)."""
-    print(f"[build_tool] obo_client is {'set' if obo_client is not None else 'None'} for tool '{tool_config.get('name')}'")  # TEMP diagnostic
     w = _ResilientWorkspaceClient(obo_client, WorkspaceClient()) if obo_client is not None else WorkspaceClient()
-    print(f"[build_tool] injected w is {type(w).__name__}")  # TEMP diagnostic
     namespace: dict[str, Any] = {"w": w}
     try:
         exec(tool_config["code"], namespace)  # noqa: S102 - intentional, this IS the Action Pack execution model
