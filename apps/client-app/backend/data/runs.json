@@ -396,5 +396,313 @@
     ],
     "timestamp": "2026-08-12T18:48:50.749032+00:00",
     "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-fd8e48f6",
+    "agent_id": "agent-a2f2d523",
+    "question": "Who leads Test Project 1?",
+    "answer": "I'm not aware of any information about the leader of Test Project 1. Can you confirm the exact name of the project?",
+    "trace": [
+      {
+        "step": "think",
+        "content": "I'm not aware of any information about the leader of Test Project 1. Can you confirm the exact name of the project?",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:07:13.055434+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-4f32e55d",
+    "agent_id": "agent-a2f2d523",
+    "question": "Who leads Test Project 1?",
+    "answer": "I'm not aware of any information about a person leading a project called \"Test Project 1\". Could you please confirm the exact name of the project you are referring to?",
+    "trace": [
+      {
+        "step": "think",
+        "content": "I'm not aware of any information about a person leading a project called \"Test Project 1\". Could you please confirm the exact name of the project you are referring to?",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:23:43.316309+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-afa81767",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of project offerbuilder",
+    "answer": "It seems like there's an issue with the OAuth token not having the required scopes. I'll try to provide a direct answer to your question.\n\nUnfortunately, I don't have any information about the project \"offerbuilder\" or its ticket status. Can you please provide more context or clarify what you're looking for? I'll do my best to help.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_project_tickets"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_project_tickets",
+        "args": {
+          "project_name": "offerbuilder"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 0080cf71-7f55-436f-baf8-57697fb2331e]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_project_tickets"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_project_tickets",
+        "args": {
+          "project_name": "offerbuilder"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 34a26f0d-fa7a-4b18-aa98-4b53b65d55ba]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: eb73a4fb-ee06-47cb-99c3-9b2dab8e82bc]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems like there's an issue with the OAuth token not having the required scopes. I'll try to provide a direct answer to your question.\n\nUnfortunately, I don't have any information about the project \"offerbuilder\" or its ticket status. Can you please provide more context or clarify what you're looking for? I'll do my best to help.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:24:07.588028+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-98da2aaf",
+    "agent_id": "agent-f51009fc",
+    "question": "Who's the lead on Test Project 1?",
+    "answer": "Unfortunately, the get_project_lead function was unable to execute due to an authentication error. However, I can tell you that to find the lead on a project, you would typically need to access the project's details or contact the project manager. If you have any more information about the project or its organization, I may be able to help you further.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "Test Project 1"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: e3b1b697-1378-477d-aa63-bcf8e3c5e232]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "Unfortunately, the get_project_lead function was unable to execute due to an authentication error. However, I can tell you that to find the lead on a project, you would typically need to access the project's details or contact the project manager. If you have any more information about the project or its organization, I may be able to help you further.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:05:21.336008+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-4bc60e88",
+    "agent_id": "agent-f51009fc",
+    "question": "Who's the lead on Test Project 1?",
+    "answer": "Unfortunately, the get_project_lead function was unable to execute due to an authentication issue. However, I can tell you that to find the lead on a project, you would typically need to access the project's details or contact the project manager. If you have any more information about the project or its organization, I may be able to help you further.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "Test Project 1"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 56e669c9-6a00-4a84-bd9a-493cc308b7b0]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "Unfortunately, the get_project_lead function was unable to execute due to an authentication issue. However, I can tell you that to find the lead on a project, you would typically need to access the project's details or contact the project manager. If you have any more information about the project or its organization, I may be able to help you further.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:06:16.967939+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-f6c850b4",
+    "agent_id": "agent-f51009fc",
+    "question": "Who's the lead on Test Project 1?",
+    "answer": "Unfortunately, the get_project_lead function was unable to retrieve the lead for Test Project 1 due to an authentication error. The provided OAuth token does not have the required scopes to access the necessary information.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "Test Project 1"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 83c57488-1f42-4e53-b4b2-d5212a675f0f]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "Unfortunately, the get_project_lead function was unable to retrieve the lead for Test Project 1 due to an authentication error. The provided OAuth token does not have the required scopes to access the necessary information.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:06:57.373590+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-e96c8b03",
+    "agent_id": "agent-f51009fc",
+    "question": "Who's the lead on Test Project 1?",
+    "answer": "Unfortunately, the get_project_lead function was unable to retrieve the lead for Test Project 1 due to an authentication error. The provided OAuth token does not have the required scopes to access the necessary information.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "Test Project 1"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 2f1cd752-c148-4d91-a484-8e5a6471f18f]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "Unfortunately, the get_project_lead function was unable to retrieve the lead for Test Project 1 due to an authentication error. The provided OAuth token does not have the required scopes to access the necessary information.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:22:55.971669+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-5e9674b4",
+    "agent_id": "agent-f51009fc",
+    "question": "Who leads Test Project 1 and how many projects do they manage?",
+    "answer": "Kalyan Kandukuri currently leads 1 project(s).",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "Test Project 1"
+        },
+        "result": "Project 'Test Project 1' is led by Kalyan Kandukuri (status: Planned)."
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "",
+        "tool_calls": [
+          "get_lead_workload"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-4-ddft",
+        "tool": "get_lead_workload",
+        "args": {
+          "lead_name": "Kalyan Kandukuri"
+        },
+        "result": "Kalyan Kandukuri currently leads 1 project(s)."
+      }
+    ],
+    "timestamp": "2026-08-12T20:25:01.742698+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-aabf7dcd",
+    "agent_id": "agent-f51009fc",
+    "question": "i want summary of projects",
+    "answer": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: e07cfc2b-af8b-4af0-9816-7d41f9039a69]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "example_project"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: a040cf71-e994-4a40-951c-c494548dcd83]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "",
+        "tool_calls": [
+          "get_lead_workload"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-4-ddft",
+        "tool": "get_lead_workload",
+        "args": {
+          "lead_name": "John Doe"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: e07cfc2b-af8b-4af0-9816-7d41f9039a69]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      }
+    ],
+    "timestamp": "2026-08-12T20:25:07.196714+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
   }
 ]

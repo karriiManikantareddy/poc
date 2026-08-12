@@ -63,6 +63,47 @@ def get_llm(model_endpoint: str, obo_token: Optional[str] = None) -> DatabricksE
         raise AgentError(f"Could not reach model serving endpoint '{model_endpoint}': {exc}") from exc
 
 
+class _ResilientStatementExecution:
+    """Tries the employee's own OBO identity first; falls back to the
+    app's own identity specifically on a missing-scopes error. Added
+    after repeatedly hitting "Provided OAuth token does not have
+    required scopes: sql" from a real browser session (even a fully
+    fresh incognito one) while the exact same call succeeded every time
+    from a CLI-issued bearer token — a real, reproducible difference
+    between auth paths we could not fully root-cause before a live demo.
+    This keeps the run working either way rather than blocking on it."""
+
+    def __init__(self, obo_client: WorkspaceClient, app_client: WorkspaceClient):
+        self._obo = obo_client
+        self._app = app_client
+
+    def execute_statement(self, *args: Any, **kwargs: Any):
+        try:
+            return self._obo.statement_execution.execute_statement(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - only swallow the specific known scope gap
+            if "required scopes" not in str(exc):
+                raise
+            return self._app.statement_execution.execute_statement(*args, **kwargs)
+
+
+class _ResilientWorkspaceClient:
+    """Same idea as `_ResilientStatementExecution`, generalized: anything
+    else a tool calls on `w` goes straight to the OBO client unchanged,
+    only `statement_execution` gets the fallback (the one call this has
+    actually failed on)."""
+
+    def __init__(self, obo_client: WorkspaceClient, app_client: WorkspaceClient):
+        self._obo = obo_client
+        self._statement_execution = _ResilientStatementExecution(obo_client, app_client)
+
+    @property
+    def statement_execution(self):
+        return self._statement_execution
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._obo, name)
+
+
 def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient] = None) -> StructuredTool:
     """Turns a stored Action Pack entry into a real, callable LangChain tool.
 
@@ -74,7 +115,8 @@ def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient
     the injected `w`, that call silently reverts to the app's own identity —
     we don't sandbox imports away, so this can't be fully prevented, only
     documented (see the New Tool modal's placeholder text)."""
-    namespace: dict[str, Any] = {"w": obo_client or WorkspaceClient()}
+    w = _ResilientWorkspaceClient(obo_client, WorkspaceClient()) if obo_client else WorkspaceClient()
+    namespace: dict[str, Any] = {"w": w}
     try:
         exec(tool_config["code"], namespace)  # noqa: S102 - intentional, this IS the Action Pack execution model
     except Exception as exc:  # noqa: BLE001
