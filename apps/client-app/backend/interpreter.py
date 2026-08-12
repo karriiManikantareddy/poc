@@ -6,6 +6,18 @@ own config (prompt, tools, model, flow graph) from the Agent Config Store
 (store.py) and compiles/runs it fresh with LangGraph. That data/engine split
 is exactly why publishing or editing an agent needs no redeploy.
 
+Two modes, both real, both using the exact same LLM/tool machinery:
+- "simple" (default): the original fixed think<->act loop — one model,
+  every attached tool available every turn.
+- "custom": the agent's own stored node/edge graph (Epic 8 — the visual
+  canvas) is compiled into a real LangGraph topology. A think node's
+  available tools are exactly whichever tool nodes it has an outgoing
+  edge to — so different think steps in the same agent can genuinely see
+  different tools. A think node whose model calls more than one connected
+  tool at once fans out to all of them as real parallel LangGraph branches
+  (confirmed supported: add_conditional_edges' routing function can return
+  a list of target node ids, not just one).
+
 Step 3a "Think" calls a real Databricks Model Serving Foundation Model
 endpoint (see dbx_chat.py) — this app runs inside the client's own
 workspace as a Databricks App, so it has real, governed access to that
@@ -28,7 +40,7 @@ from langgraph.graph import END, START, StateGraph
 
 from dbx_chat import DatabricksEndpointChat
 
-MAX_STEPS = 8  # hard stop so a misconfigured loop can't run forever
+MAX_STEPS = 12  # hard stop so a misconfigured loop (or graph cycle) can't run forever
 
 
 class AgentError(Exception):
@@ -42,7 +54,7 @@ class RunState(TypedDict):
     steps: int
 
 
-def get_llm(model_endpoint: str, obo_token: Optional[str] = None):
+def get_llm(model_endpoint: str, obo_token: Optional[str] = None) -> DatabricksEndpointChat:
     if not model_endpoint:
         raise AgentError("This agent has no model selected — pick a serving endpoint before running it.")
     try:
@@ -80,6 +92,44 @@ def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient
     )
 
 
+def _finalize(
+    agent: dict[str, Any],
+    question: str,
+    final_state: RunState,
+    llm_used_obo: Optional[bool],
+    obo_token: Optional[str],
+    caller_email: Optional[str],
+) -> dict[str, Any]:
+    final_answer = ""
+    for msg in reversed(final_state["messages"]):
+        if isinstance(msg, AIMessage) and msg.content:
+            final_answer = msg.content
+            break
+
+    if not obo_token:
+        ran_as = "app identity (no OBO token forwarded)"
+    elif llm_used_obo:
+        ran_as = f"employee ({caller_email}) — model + tools"
+    else:
+        # See dbx_chat.py — this branch hit once right after the
+        # model-serving scope was first declared, then stopped
+        # reproducing on retest with no code change (likely scope
+        # propagation delay, not a permanent block). Kept as a real
+        # fallback rather than removed, so a recurrence degrades
+        # gracefully instead of failing the whole run.
+        ran_as = f"employee ({caller_email}) for tools; app identity for the model call (see dbx_chat.py notes)"
+
+    return {
+        "id": f"run-{uuid.uuid4().hex[:8]}",
+        "agent_id": agent["id"],
+        "question": question,
+        "answer": final_answer,
+        "trace": final_state["trace"],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ran_as": ran_as,
+    }
+
+
 def run_agent(
     agent: dict[str, Any],
     tools_config: list[dict[str, Any]],
@@ -87,20 +137,24 @@ def run_agent(
     obo_token: Optional[str] = None,
     caller_email: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Executes one agent's own flow end to end and returns a full trace —
-    this is the literal implementation of page 3's Steps 1-3.
+    """Dispatches to simple or custom mode — see module docstring. Simple
+    is the default so every agent created before "custom" existed keeps
+    running exactly as it always did."""
+    if agent.get("mode") == "custom":
+        return _run_custom_agent(agent, tools_config, question, obo_token, caller_email)
+    return _run_simple_agent(agent, tools_config, question, obo_token, caller_email)
 
-    When `obo_token` is available (forwarded from the caller's own browser
-    session — see main.py), both the model call and every tool run as that
-    employee, so real Unity Catalog grants on THEIR identity are what's
-    actually enforced, not the app's own blanket access."""
-    # auth_type="pat" is required: without it, Config also picks up this
-    # app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and refuses to
-    # proceed with "more than one authorization method configured" — a real
-    # error hit building this, not a hypothetical.
-    obo_client = (
-        WorkspaceClient(config=Config(token=obo_token, auth_type="pat")) if obo_token else None
-    )
+
+def _run_simple_agent(
+    agent: dict[str, Any],
+    tools_config: list[dict[str, Any]],
+    question: str,
+    obo_token: Optional[str],
+    caller_email: Optional[str],
+) -> dict[str, Any]:
+    """The original fixed think<->act loop — this is the literal
+    implementation of page 3's Steps 1-3 for the common case."""
+    obo_client = _build_obo_client(obo_token)
     llm = get_llm(agent.get("model", ""), obo_token=obo_token)
     tools = [build_tool(t, obo_client) for t in tools_config]
     llm_with_tools = llm.bind_tools(tools) if tools else llm
@@ -148,6 +202,156 @@ def run_agent(
     graph.add_conditional_edges("think", route, {"act": "act", END: END} if tools else {END: END})
 
     compiled = graph.compile()
+    initial: RunState = {
+        "messages": [SystemMessage(content=agent.get("prompt", "")), HumanMessage(content=question)],
+        "trace": [],
+        "steps": 0,
+    }
+    final_state = compiled.invoke(initial)
+    return _finalize(agent, question, final_state, llm.last_call_was_obo, obo_token, caller_email)
+
+
+def _build_obo_client(obo_token: Optional[str]) -> Optional[WorkspaceClient]:
+    # auth_type="pat" is required: without it, Config also picks up this
+    # app's own ambient DATABRICKS_CLIENT_ID/SECRET env vars and refuses to
+    # proceed with "more than one authorization method configured" — a real
+    # error hit building this, not a hypothetical.
+    return WorkspaceClient(config=Config(token=obo_token, auth_type="pat")) if obo_token else None
+
+
+def _run_custom_agent(
+    agent: dict[str, Any],
+    tools_config: list[dict[str, Any]],
+    question: str,
+    obo_token: Optional[str],
+    caller_email: Optional[str],
+) -> dict[str, Any]:
+    """Compiles the agent's own stored node/edge graph (built in the visual
+    canvas) into a real LangGraph topology and runs it. Validated up front
+    rather than left to fail confusingly mid-run — a business user editing
+    a graph in the canvas should get a clear reason, not a stack trace."""
+    graph_def = agent.get("graph") or {}
+    nodes = {n["id"]: n for n in graph_def.get("nodes", [])}
+    edges = graph_def.get("edges", [])
+    if not nodes:
+        raise AgentError("This agent's custom graph is empty — add at least one node in the canvas.")
+
+    tools_by_id = {t["id"]: t for t in tools_config}
+    obo_client = _build_obo_client(obo_token)
+    llm = get_llm(agent.get("model", ""), obo_token=obo_token)
+
+    outgoing: dict[str, list[str]] = {nid: [] for nid in nodes}
+    incoming: dict[str, list[str]] = {nid: [] for nid in nodes}
+    for e in edges:
+        src, tgt = e["source"], e["target"]
+        if src not in nodes or tgt not in nodes:
+            raise AgentError(f"Edge references a node that doesn't exist ({src} -> {tgt}).")
+        outgoing[src].append(tgt)
+        incoming[tgt].append(src)
+
+    # Entry must be explicit, not inferred from edge topology: a normal
+    # think<->tool loop-back gives the think node an incoming edge too,
+    # so "no incoming edges" can't reliably identify the start once a
+    # graph has any loop in it — confirmed by hitting exactly that with
+    # a real think<->tool<->think test graph.
+    entry_node = graph_def.get("entry")
+    if not entry_node or entry_node not in nodes:
+        raise AgentError("This agent's graph has no starting node set — mark one node as the entry point in the canvas.")
+
+    # Build real LangChain tools once per tool node, each bound only to
+    # the specific tool it represents.
+    node_tools: dict[str, StructuredTool] = {}
+    for nid, node in nodes.items():
+        if node["type"] == "tool":
+            tool_cfg = tools_by_id.get(node.get("tool_id"))
+            if not tool_cfg:
+                raise AgentError(f"Tool node '{nid}' references a tool that no longer exists.")
+            node_tools[nid] = build_tool(tool_cfg, obo_client)
+            if not incoming[nid]:
+                raise AgentError(f"Tool node '{nid}' ({tool_cfg['name']}) isn't connected to any think node — it can never run.")
+
+    graph = StateGraph(RunState)
+    llm_used_obo_holder = {"value": None}
+
+    for nid, node in nodes.items():
+        if node["type"] == "think":
+            connected_tool_ids = [t for t in outgoing[nid] if nodes[t]["type"] == "tool"]
+            connected_tools = [node_tools[t] for t in connected_tool_ids]
+            bound_llm = llm.bind_tools(connected_tools) if connected_tools else llm
+
+            def think_fn(state: RunState, *, _llm=bound_llm, _nid=nid) -> RunState:
+                response = _llm.invoke(state["messages"])
+                llm_used_obo_holder["value"] = llm.last_call_was_obo
+                state["trace"].append({
+                    "step": "think",
+                    "node": _nid,
+                    "content": response.content,
+                    "tool_calls": [tc["name"] for tc in getattr(response, "tool_calls", [])],
+                })
+                return {"messages": state["messages"] + [response], "trace": state["trace"], "steps": state["steps"] + 1}
+
+            graph.add_node(nid, think_fn)
+        elif node["type"] == "tool":
+
+            def tool_fn(state: RunState, *, _nid=nid, _tool=node_tools[nid]) -> RunState:
+                last = state["messages"][-1]
+                matching = [c for c in getattr(last, "tool_calls", []) if c["name"] == _tool.name]
+                tool_messages = []
+                for call in matching:
+                    try:
+                        result = _tool.invoke(call["args"])
+                    except Exception as exc:  # noqa: BLE001 - show the agent its own tool's error
+                        result = f"Error running tool: {exc}"
+                    state["trace"].append({"step": "act", "node": _nid, "tool": _tool.name, "args": call["args"], "result": str(result)})
+                    tool_messages.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
+                return {"messages": state["messages"] + tool_messages, "trace": state["trace"], "steps": state["steps"] + 1}
+
+            graph.add_node(nid, tool_fn)
+        else:
+            raise AgentError(f"Node '{nid}' has an unknown type '{node['type']}'.")
+
+    graph.add_edge(START, entry_node)
+
+    for nid, node in nodes.items():
+        targets = outgoing[nid]
+        if node["type"] == "tool":
+            if len(targets) > 1:
+                raise AgentError(f"Tool node '{nid}' has more than one outgoing connection — a tool step must lead to at most one next step.")
+            if targets:
+                graph.add_edge(nid, targets[0])
+            # else: implicitly ends here — no edge needed, LangGraph treats a
+            # node with no outgoing edges as a valid dead end only if it's
+            # reachable from an END-bound conditional; tool nodes always
+            # return to their caller via the edge below, so this is handled
+            # by the think node's routing instead (a tool node here should
+            # always have exactly one outgoing edge back to a think node).
+            continue
+
+        tool_targets = [t for t in targets if nodes[t]["type"] == "tool"]
+        fallback_targets = [t for t in targets if nodes[t]["type"] != "tool"]
+        if len(fallback_targets) > 1:
+            raise AgentError(f"Think node '{nid}' has more than one non-tool outgoing connection — only one 'continue thinking' path is allowed.")
+        tool_name_to_node = {node_tools[t].name: t for t in tool_targets}
+
+        def route(state: RunState, *, _tool_map=tool_name_to_node, _fallback=fallback_targets[0] if fallback_targets else None) -> Any:
+            if state["steps"] >= MAX_STEPS:
+                return END
+            last = state["messages"][-1]
+            calls = getattr(last, "tool_calls", None) or []
+            targets_hit = [_tool_map[c["name"]] for c in calls if c["name"] in _tool_map]
+            if targets_hit:
+                return targets_hit
+            return _fallback if _fallback else END
+
+        # No path_map: per LangGraph's own contract, when it's omitted the
+        # values `route` returns (real node ids, possibly several for a
+        # parallel fan-out, or END) are used directly as target names.
+        graph.add_conditional_edges(nid, route)
+
+    try:
+        compiled = graph.compile()
+    except Exception as exc:  # noqa: BLE001 - a malformed canvas graph should say so, not crash opaquely
+        raise AgentError(f"This agent's graph isn't valid: {exc}") from exc
 
     initial: RunState = {
         "messages": [SystemMessage(content=agent.get("prompt", "")), HumanMessage(content=question)],
@@ -155,32 +359,4 @@ def run_agent(
         "steps": 0,
     }
     final_state = compiled.invoke(initial)
-
-    final_answer = ""
-    for msg in reversed(final_state["messages"]):
-        if isinstance(msg, AIMessage) and msg.content:
-            final_answer = msg.content
-            break
-
-    if not obo_token:
-        ran_as = "app identity (no OBO token forwarded)"
-    elif llm.last_call_was_obo:
-        ran_as = f"employee ({caller_email}) — model + tools"
-    else:
-        # See dbx_chat.py — this branch hit once right after the
-        # model-serving scope was first declared, then stopped
-        # reproducing on retest with no code change (likely scope
-        # propagation delay, not a permanent block). Kept as a real
-        # fallback rather than removed, so a recurrence degrades
-        # gracefully instead of failing the whole run.
-        ran_as = f"employee ({caller_email}) for tools; app identity for the model call (see dbx_chat.py notes)"
-
-    return {
-        "id": f"run-{uuid.uuid4().hex[:8]}",
-        "agent_id": agent["id"],
-        "question": question,
-        "answer": final_answer,
-        "trace": final_state["trace"],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "ran_as": ran_as,
-    }
+    return _finalize(agent, question, final_state, llm_used_obo_holder["value"], obo_token, caller_email)

@@ -114,7 +114,7 @@
 
 <!-- Agent editor modal -->
 <div id="agent-modal" class="modal-overlay" hidden>
-  <div class="modal-card" style="width:640px;max-height:85vh;overflow-y:auto;">
+  <div class="modal-card" id="agent-modal-card" style="width:640px;max-height:85vh;overflow-y:auto;">
     <div class="modal-title" id="agent-modal-title">New Agent</div>
     <label for="ag-name">Name</label>
     <input type="text" id="ag-name" placeholder="Contract Review Assistant">
@@ -122,8 +122,31 @@
     <textarea id="ag-prompt" rows="4" placeholder="You are a helpful assistant that..."></textarea>
     <label for="ag-model">Model (this workspace's live serving endpoints)</label>
     <select id="ag-model"><option value="">Loading endpoints...</option></select>
-    <label for="ag-tools">Tools attached to this agent</label>
-    <div id="ag-tools-list" class="card" style="padding:10px;max-height:140px;overflow-y:auto;"></div>
+
+    <label for="ag-mode">Mode</label>
+    <select id="ag-mode">
+      <option value="simple">Simple — every attached tool available every turn</option>
+      <option value="custom">Custom — build the flow visually (branches, parallel tools, loops)</option>
+    </select>
+
+    <div id="ag-simple-section">
+      <label for="ag-tools">Tools attached to this agent</label>
+      <div id="ag-tools-list" class="card" style="padding:10px;max-height:140px;overflow-y:auto;"></div>
+    </div>
+
+    <div id="ag-custom-section" style="display:none;">
+      <div class="section-title" style="margin-top:var(--sp-4);">Flow canvas</div>
+      <p class="hint" style="margin:0 0 8px;">Drag a node to move it. Drag from the small dot on a node's edge to another node to connect them. Click a node's star to mark it as the starting node. A Think node's available tools are exactly the Tool nodes it's connected to.</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn secondary small" id="canvas-add-think">+ Think node</button>
+        <button class="btn secondary small" id="canvas-add-tool">+ Tool node</button>
+      </div>
+      <div id="canvas-area" style="position:relative;width:100%;height:340px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);overflow:auto;">
+        <svg id="canvas-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></svg>
+      </div>
+      <div id="canvas-error" class="feedback"></div>
+    </div>
+
     <label for="ag-groups">Visible to (this workspace's real Groups — leave all unchecked to allow everyone)</label>
     <div id="ag-groups-list" class="card" style="padding:10px;max-height:120px;overflow-y:auto;"></div>
     <div class="modal-actions" style="margin-top:16px;">

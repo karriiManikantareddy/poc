@@ -105,6 +105,8 @@ def create_agent(agent: dict[str, Any]):
     agent.setdefault("status", "draft")
     agent.setdefault("tools", [])
     agent.setdefault("visible_to_groups", [])
+    agent.setdefault("mode", "simple")
+    agent.setdefault("graph", {"nodes": [], "edges": []})
     agent["created_at"] = now()
     return store.upsert_item("agents", agent)
 
@@ -117,6 +119,8 @@ def update_agent(agent_id: str, agent: dict[str, Any], request: Request):
         raise HTTPException(404, "Agent not found")
     agent["id"] = agent_id
     agent.setdefault("visible_to_groups", existing.get("visible_to_groups", []))
+    agent.setdefault("mode", existing.get("mode", "simple"))
+    agent.setdefault("graph", existing.get("graph", {"nodes": [], "edges": []}))
     return store.upsert_item("agents", agent)
 
 
@@ -140,7 +144,10 @@ def run(agent_id: str, body: RunRequest, request: Request):
     groups, admin = identity.resolve_access(request)
     if not agent or not identity.can_see(agent, groups, admin):
         raise HTTPException(404, "Agent not found")
-    tool_ids = agent.get("tools", [])
+    if agent.get("mode") == "custom":
+        tool_ids = [n["tool_id"] for n in agent.get("graph", {}).get("nodes", []) if n.get("type") == "tool" and n.get("tool_id")]
+    else:
+        tool_ids = agent.get("tools", [])
     all_tools = {t["id"]: t for t in store.read("tools")}
     missing = [tid for tid in tool_ids if tid not in all_tools]
     if missing:

@@ -28,5 +28,373 @@
     ],
     "timestamp": "2026-08-12T18:26:35.281740+00:00",
     "ran_as": "employee (swamymanikantareddykarri@gmail.com)"
+  },
+  {
+    "id": "run-93f59a18",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects",
+    "answer": "It looks like the summary of all projects shows a total of 9,929 tickets across all projects, with 9238 of them being \"Done\", 3208 in \"To Do\" status, 1205 in \"In Progress\", 266 in \"In Review\", and 31 in \"Blocked\" status.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Done: 9238 tickets\nTo Do: 3208 tickets\nIn Progress: 1205 tickets\nIn Review: 266 tickets\nBlocked: 31 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It looks like the summary of all projects shows a total of 9,929 tickets across all projects, with 9238 of them being \"Done\", 3208 in \"To Do\" status, 1205 in \"In Progress\", 266 in \"In Review\", and 31 in \"Blocked\" status.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:35:16.843824+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-25ed7d8b",
+    "agent_id": "agent-a2f2d523",
+    "question": "How many tickets does Spotify AI have?",
+    "answer": "It looks like Spotify AI has 2 tickets in the \"To Do\" status.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_project_tickets"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_project_tickets",
+        "args": {
+          "project_name": "Spotify AI"
+        },
+        "result": "To Do: 2 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It looks like Spotify AI has 2 tickets in the \"To Do\" status.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:35:42.130883+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-7a201dc4",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects in format employeename : project",
+    "answer": "It seems that the function call to get_ticket_summary failed due to a lack of required OAuth token scopes. Unfortunately, I don't have the ability to provide OAuth tokens or modify the existing ones. However, I can try to help you with an alternative solution.\n\nSince you want a summary of projects in the format \"employeename : project\", I'll try to provide a direct answer. However, I need to know the list of employees and their corresponding projects to provide a meaningful response. Can you please provide me with the list of employees and their projects?",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 3970371c-7690-4b21-aa9e-77039fcc23e6]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems that the function call to get_ticket_summary failed due to a lack of required OAuth token scopes. Unfortunately, I don't have the ability to provide OAuth tokens or modify the existing ones. However, I can try to help you with an alternative solution.\n\nSince you want a summary of projects in the format \"employeename : project\", I'll try to provide a direct answer. However, I need to know the list of employees and their corresponding projects to provide a meaningful response. Can you please provide me with the list of employees and their projects?",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:36:22.930502+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+  },
+  {
+    "id": "run-2c3afd30",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects in format employeename : project",
+    "answer": "It seems like there was an issue with the OAuth token. I'll try to provide the summary in a different way.\n\nUnfortunately, I don't have any information about the projects or employees. Can you please provide me with the exact name of the project you're interested in, so I can try to help you further?",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 1b8426a1-7bcc-49ac-a23a-5f13c603dbbe]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems like there was an issue with the OAuth token. I'll try to provide the summary in a different way.\n\nUnfortunately, I don't have any information about the projects or employees. Can you please provide me with the exact name of the project you're interested in, so I can try to help you further?",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:39:15.173090+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+  },
+  {
+    "id": "run-76eed717",
+    "agent_id": "agent-a2f2d523",
+    "question": "How many tickets does Spotify AI have?",
+    "answer": "It seems that the OAuth token does not have the required scopes to run the tool. I'm not sure what this means, but I can try to help you get the information you need.\n\nCan you please confirm the exact name of the project you are looking for? I'll try to help you find the information you need.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_project_tickets"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_project_tickets",
+        "args": {
+          "project_name": "Spotify AI"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 895f50ef-6bbc-4691-abaa-43f93b0c567a]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems that the OAuth token does not have the required scopes to run the tool. I'm not sure what this means, but I can try to help you get the information you need.\n\nCan you please confirm the exact name of the project you are looking for? I'll try to help you find the information you need.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:40:46.334154+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+  },
+  {
+    "id": "run-771d707b",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects in format employeename : project",
+    "answer": "It seems that the summary is across all projects. If you'd like to see the summary for a specific project, please let me know the exact name of the project, and I can help you with that.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Done: 9238 tickets\nTo Do: 3208 tickets\nIn Progress: 1205 tickets\nIn Review: 266 tickets\nBlocked: 31 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It seems that the summary is across all projects. If you'd like to see the summary for a specific project, please let me know the exact name of the project, and I can help you with that.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:42:03.140754+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-ae7d22a7",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects in format employeename : project",
+    "answer": "It seems that the summary provided is in the format of ticket status across all projects, not in the format of \"employeename : project\" as you requested. Unfortunately, the available functions do not provide a direct way to get the project summary in the desired format. However, the provided summary does give an overall view of the ticket status across all projects.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Done: 9238 tickets\nTo Do: 3208 tickets\nIn Progress: 1205 tickets\nIn Review: 266 tickets\nBlocked: 31 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It seems that the summary provided is in the format of ticket status across all projects, not in the format of \"employeename : project\" as you requested. Unfortunately, the available functions do not provide a direct way to get the project summary in the desired format. However, the provided summary does give an overall view of the ticket status across all projects.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:42:08.060031+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-441c8fd8",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects in format employeename : project",
+    "answer": "It seems that the function call provided the overall ticket summary across all projects. However, it doesn't seem to match the format you requested, which is \"employeename : project\". Let me try to help you further.\n\nTo get the summary of projects in the format \"employeename : project\", I would need to call the \"get_project_tickets\" function with the project name as an argument. However, I don't have any information about the project names or the employees associated with them.\n\nCould you please provide me with the exact name of the project you're interested in, so I can call the \"get_project_tickets\" function and provide you with the summary in the desired format?",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Done: 9238 tickets\nTo Do: 3208 tickets\nIn Progress: 1205 tickets\nIn Review: 266 tickets\nBlocked: 31 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It seems that the function call provided the overall ticket summary across all projects. However, it doesn't seem to match the format you requested, which is \"employeename : project\". Let me try to help you further.\n\nTo get the summary of projects in the format \"employeename : project\", I would need to call the \"get_project_tickets\" function with the project name as an argument. However, I don't have any information about the project names or the employees associated with them.\n\nCould you please provide me with the exact name of the project you're interested in, so I can call the \"get_project_tickets\" function and provide you with the summary in the desired format?",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:42:12.405368+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-338ca68d",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects",
+    "answer": "It seems like there was an issue with the OAuth token. I'll try to provide a summary of projects without using the get_ticket_summary function.\n\nUnfortunately, I don't have any information about the projects or their tickets. Can you please provide me with the name of a specific project you'd like to get a summary for? I can try to help you with that.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: b5edfbce-733f-480f-a8cb-0943cd70a9c8]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems like there was an issue with the OAuth token. I'll try to provide a summary of projects without using the get_ticket_summary function.\n\nUnfortunately, I don't have any information about the projects or their tickets. Can you please provide me with the name of a specific project you'd like to get a summary for? I can try to help you with that.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:45:09.796370+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+  },
+  {
+    "id": "run-f97aa6c0",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects",
+    "answer": "It seems like there's an issue with the OAuth token. Unfortunately, I'm not able to provide a summary of projects at this time. Can you please confirm the exact name of the project you're interested in? I can try to help you with that.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 0fb6f6d4-119a-479d-84d8-74b4f685f1b5]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: e9fdb423-b477-4185-abc9-34c60f421138]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems like there's an issue with the OAuth token. Unfortunately, I'm not able to provide a summary of projects at this time. Can you please confirm the exact name of the project you're interested in? I can try to help you with that.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:45:34.827014+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (Foundation Model OBO invocation isn't supported by Databricks Apps yet)"
+  },
+  {
+    "id": "run-c727055d",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of projects",
+    "answer": "It looks like the get_ticket_summary function has provided a summary of all projects. The current status is:\n\n* Done: 9238 tickets\n* To Do: 3208 tickets\n* In Progress: 1205 tickets\n* In Review: 266 tickets\n* Blocked: 31 tickets\n\nIf you'd like to know the status of a specific project, you can ask me to call the get_project_tickets function with the project name.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Done: 9238 tickets\nTo Do: 3208 tickets\nIn Progress: 1205 tickets\nIn Review: 266 tickets\nBlocked: 31 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It looks like the get_ticket_summary function has provided a summary of all projects. The current status is:\n\n* Done: 9238 tickets\n* To Do: 3208 tickets\n* In Progress: 1205 tickets\n* In Review: 266 tickets\n* Blocked: 31 tickets\n\nIf you'd like to know the status of a specific project, you can ask me to call the get_project_tickets function with the project name.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:47:49.779411+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
+  },
+  {
+    "id": "run-b033052c",
+    "agent_id": "agent-a2f2d523",
+    "question": "i want summary of project offerbuilder",
+    "answer": "It seems that there are no tickets for the project \"offerbuilder\", but we were able to get a summary of all projects, which includes the overall status of tickets across all projects. The current status is:\n\n* Done: 9238 tickets\n* To Do: 3208 tickets\n* In Progress: 1205 tickets\n* In Review: 266 tickets\n* Blocked: 31 tickets",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_project_tickets"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_project_tickets",
+        "args": {
+          "project_name": "offerbuilder"
+        },
+        "result": "No tickets found for project 'offerbuilder'."
+      },
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Done: 9238 tickets\nTo Do: 3208 tickets\nIn Progress: 1205 tickets\nIn Review: 266 tickets\nBlocked: 31 tickets"
+      },
+      {
+        "step": "think",
+        "content": "It seems that there are no tickets for the project \"offerbuilder\", but we were able to get a summary of all projects, which includes the overall status of tickets across all projects. The current status is:\n\n* Done: 9238 tickets\n* To Do: 3208 tickets\n* In Progress: 1205 tickets\n* In Review: 266 tickets\n* Blocked: 31 tickets",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T18:48:50.749032+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) \u2014 model + tools"
   }
 ]

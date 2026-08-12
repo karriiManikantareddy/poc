@@ -75,6 +75,19 @@ function renderAgentList() {
   });
 }
 
+function renderGraphSummary(graph) {
+  if (!graph || !graph.nodes || !graph.nodes.length) return `<p class="hint">No flow built yet — edit this agent to open the canvas.</p>`;
+  const byId = Object.fromEntries(graph.nodes.map((n) => [n.id, n]));
+  const toolName = (tid) => (tools.find((t) => t.id === tid) || {}).name || "(missing tool)";
+  const lines = graph.nodes.map((n) => {
+    const isEntry = graph.entry === n.id;
+    const label = n.type === "think" ? "Think" : `Tool: ${escapeHtml(toolName(n.tool_id))}`;
+    const outs = graph.edges.filter((e) => e.source === n.id).map((e) => escapeHtml(byId[e.target] ? (byId[e.target].type === "tool" ? toolName(byId[e.target].tool_id) : "Think") : "?"));
+    return `<li>${isEntry ? "★ " : ""}${label}${outs.length ? ` → ${outs.join(", ")}` : ""}</li>`;
+  });
+  return `<ul style="margin:0;padding-left:20px;">${lines.join("")}</ul>`;
+}
+
 async function selectAgent(id) {
   selectedAgentId = id;
   renderAgentList();
@@ -85,13 +98,14 @@ async function selectAgent(id) {
 
 function renderAgentDetail(agent, runs) {
   const detail = document.getElementById("agent-detail");
+  const isCustom = agent.mode === "custom";
   const attachedTools = tools.filter((t) => (agent.tools || []).includes(t.id));
 
   detail.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
       <div>
         <h2 style="margin:0 0 2px;font-size:18px;">${escapeHtml(agent.name)}</h2>
-        <div class="hint" style="margin:0;">${escapeHtml(agent.model || "no model selected")}</div>
+        <div class="hint" style="margin:0;">${escapeHtml(agent.model || "no model selected")}${isCustom ? " · custom flow" : ""}</div>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn secondary small" id="edit-agent-btn">Edit</button>
@@ -102,11 +116,13 @@ function renderAgentDetail(agent, runs) {
     <div class="section-title">System prompt</div>
     <div class="code" style="white-space:pre-wrap;">${escapeHtml(agent.prompt || "(empty)")}</div>
 
-    <div class="section-title">Tools attached</div>
+    <div class="section-title">${isCustom ? "Flow" : "Tools attached"}</div>
     ${
-      attachedTools.length
-        ? `<ul style="margin:0;padding-left:20px;">${attachedTools.map((t) => `<li><strong>${escapeHtml(t.name)}</strong> — ${escapeHtml(t.description || "")}</li>`).join("")}</ul>`
-        : `<p class="hint">No tools attached — this agent can only think, not act.</p>`
+      isCustom
+        ? renderGraphSummary(agent.graph)
+        : attachedTools.length
+          ? `<ul style="margin:0;padding-left:20px;">${attachedTools.map((t) => `<li><strong>${escapeHtml(t.name)}</strong> — ${escapeHtml(t.description || "")}</li>`).join("")}</ul>`
+          : `<p class="hint">No tools attached — this agent can only think, not act.</p>`
     }
 
     <div class="section-title">Visible to</div>
@@ -214,6 +230,12 @@ async function openAgentModal(agent) {
   await loadTools();
   renderToolCheckboxes(agent ? agent.tools || [] : []);
 
+  const mode = agent && agent.mode === "custom" ? "custom" : "simple";
+  document.getElementById("ag-mode").value = mode;
+  canvasGraph = agent && agent.graph ? JSON.parse(JSON.stringify(agent.graph)) : { entry: null, nodes: [], edges: [] };
+  applyAgentModeUI(mode);
+  if (mode === "custom") renderCanvas();
+
   const groupsContainer = document.getElementById("ag-groups-list");
   groupsContainer.innerHTML = `<p class="hint">Loading groups...</p>`;
   try {
@@ -248,16 +270,211 @@ function renderToolCheckboxes(selectedToolIds) {
   document.getElementById("ag-new-tool-btn").addEventListener("click", () => openToolModal());
 }
 
+// ---------------- Custom mode: visual graph canvas ----------------
+let canvasGraph = { entry: null, nodes: [], edges: [] };
+let canvasNodeCounter = 0;
+
+function applyAgentModeUI(mode) {
+  document.getElementById("ag-simple-section").style.display = mode === "custom" ? "none" : "";
+  document.getElementById("ag-custom-section").style.display = mode === "custom" ? "" : "none";
+}
+
+document.getElementById("ag-mode").addEventListener("change", (e) => {
+  applyAgentModeUI(e.target.value);
+  if (e.target.value === "custom") renderCanvas();
+});
+
+document.getElementById("canvas-add-think").addEventListener("click", () => {
+  addCanvasNode("think");
+});
+document.getElementById("canvas-add-tool").addEventListener("click", () => {
+  addCanvasNode("tool");
+});
+
+function addCanvasNode(type) {
+  canvasNodeCounter += 1;
+  const col = (canvasGraph.nodes.length) % 3;
+  const row = Math.floor(canvasGraph.nodes.length / 3);
+  const node = { id: `node-${canvasNodeCounter}-${Math.random().toString(36).slice(2, 6)}`, type, x: 20 + col * 190, y: 20 + row * 110 };
+  if (type === "tool") node.tool_id = "";
+  canvasGraph.nodes.push(node);
+  if (!canvasGraph.entry) canvasGraph.entry = node.id;
+  renderCanvas();
+}
+
+function nodeById(id) {
+  return canvasGraph.nodes.find((n) => n.id === id);
+}
+
+function renderCanvas() {
+  const area = document.getElementById("canvas-area");
+  area.querySelectorAll(".canvas-node").forEach((el) => el.remove());
+  const svg = document.getElementById("canvas-svg");
+  svg.innerHTML = "";
+
+  canvasGraph.edges.forEach((edge, idx) => {
+    const from = nodeById(edge.source);
+    const to = nodeById(edge.target);
+    if (!from || !to) return;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", from.x + 160);
+    line.setAttribute("y1", from.y + 35);
+    line.setAttribute("x2", to.x);
+    line.setAttribute("y2", to.y + 35);
+    line.setAttribute("stroke", "#8A9296");
+    line.setAttribute("stroke-width", "2");
+    line.style.pointerEvents = "auto";
+    line.style.cursor = "pointer";
+    line.title = "Click to delete this connection";
+    line.addEventListener("click", () => {
+      canvasGraph.edges.splice(idx, 1);
+      renderCanvas();
+    });
+    svg.appendChild(line);
+  });
+
+  canvasGraph.nodes.forEach((node) => {
+    const div = document.createElement("div");
+    div.className = "canvas-node";
+    div.dataset.id = node.id;
+    const isEntry = canvasGraph.entry === node.id;
+    div.style.cssText = `position:absolute;left:${node.x}px;top:${node.y}px;width:160px;background:var(--surface);border:2px solid ${isEntry ? "var(--red)" : "var(--border)"};border-radius:var(--radius-sm);padding:8px;cursor:move;box-shadow:var(--shadow-1);`;
+
+    const toolOptions = node.type === "tool"
+      ? `<select class="canvas-tool-select" data-node="${node.id}" style="width:100%;margin-top:4px;font-size:12px;padding:4px;">
+          <option value="">Pick a tool...</option>
+          ${tools.map((t) => `<option value="${escapeHtml(t.id)}" ${node.tool_id === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
+        </select>`
+      : "";
+
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;">
+        <span>${node.type === "think" ? "Think" : "Tool"}</span>
+        <span style="display:flex;gap:6px;">
+          <span class="canvas-star" data-node="${node.id}" title="Set as starting node" style="cursor:pointer;color:${isEntry ? "var(--red)" : "var(--faint)"};">${isEntry ? "★" : "☆"}</span>
+          <span class="canvas-delete" data-node="${node.id}" title="Delete node" style="cursor:pointer;color:var(--danger);">✕</span>
+        </span>
+      </div>
+      ${toolOptions}
+      <div class="canvas-handle" data-node="${node.id}" title="Drag to another node to connect" style="position:absolute;right:-8px;bottom:-8px;width:16px;height:16px;border-radius:50%;background:var(--red);cursor:crosshair;"></div>
+    `;
+    area.appendChild(div);
+  });
+
+  wireCanvasNodeEvents();
+}
+
+function wireCanvasNodeEvents() {
+  document.querySelectorAll(".canvas-node").forEach((div) => {
+    div.addEventListener("mousedown", (e) => {
+      if (e.target.closest("select, .canvas-star, .canvas-delete, .canvas-handle")) return;
+      const node = nodeById(div.dataset.id);
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const origX = node.x;
+      const origY = node.y;
+      function onMove(ev) {
+        node.x = origX + (ev.clientX - startX);
+        node.y = origY + (ev.clientY - startY);
+        renderCanvas();
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  });
+
+  document.querySelectorAll(".canvas-star").forEach((el) => {
+    el.addEventListener("click", () => {
+      canvasGraph.entry = el.dataset.node;
+      renderCanvas();
+    });
+  });
+
+  document.querySelectorAll(".canvas-delete").forEach((el) => {
+    el.addEventListener("click", () => {
+      const id = el.dataset.node;
+      canvasGraph.nodes = canvasGraph.nodes.filter((n) => n.id !== id);
+      canvasGraph.edges = canvasGraph.edges.filter((e) => e.source !== id && e.target !== id);
+      if (canvasGraph.entry === id) canvasGraph.entry = canvasGraph.nodes[0] ? canvasGraph.nodes[0].id : null;
+      renderCanvas();
+    });
+  });
+
+  document.querySelectorAll(".canvas-tool-select").forEach((el) => {
+    el.addEventListener("change", () => {
+      nodeById(el.dataset.node).tool_id = el.value;
+    });
+  });
+
+  document.querySelectorAll(".canvas-handle").forEach((el) => {
+    el.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const sourceId = el.dataset.node;
+      function onUp(ev) {
+        document.removeEventListener("mouseup", onUp);
+        const targetDiv = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".canvas-node");
+        if (targetDiv && targetDiv.dataset.id !== sourceId) {
+          const targetId = targetDiv.dataset.id;
+          const exists = canvasGraph.edges.some((edge) => edge.source === sourceId && edge.target === targetId);
+          if (!exists) canvasGraph.edges.push({ source: sourceId, target: targetId });
+          renderCanvas();
+        }
+      }
+      document.addEventListener("mouseup", onUp);
+    });
+  });
+}
+
+function validateCanvasGraph() {
+  if (!canvasGraph.nodes.length) return "Add at least one node to the canvas.";
+  if (!canvasGraph.entry) return "Mark one node as the starting node (click its star).";
+  for (const node of canvasGraph.nodes) {
+    if (node.type === "tool" && !node.tool_id) return "Every Tool node needs a tool selected.";
+  }
+  const hasIncoming = new Set(canvasGraph.edges.map((e) => e.target));
+  for (const node of canvasGraph.nodes) {
+    if (node.type === "tool" && !hasIncoming.has(node.id)) {
+      return "Every Tool node must be connected from a Think node — it can never run otherwise.";
+    }
+  }
+  return null;
+}
+
 document.getElementById("agent-modal-save").addEventListener("click", async () => {
   const name = document.getElementById("ag-name").value.trim();
   const prompt = document.getElementById("ag-prompt").value;
   const model = document.getElementById("ag-model").value;
+  const mode = document.getElementById("ag-mode").value;
   const selectedTools = Array.from(document.querySelectorAll(".ag-tool-checkbox:checked")).map((el) => el.value);
   const selectedGroups = Array.from(document.querySelectorAll(".ag-group-checkbox:checked")).map((el) => el.value);
 
   if (!name) return;
 
-  const body = { name, prompt, model, tools: selectedTools, visible_to_groups: selectedGroups, status: "published" };
+  if (mode === "custom") {
+    const error = validateCanvasGraph();
+    const errorEl = document.getElementById("canvas-error");
+    if (error) {
+      feedback(errorEl, "err", escapeHtml(error));
+      return;
+    }
+    feedback(errorEl, "", "");
+  }
+
+  const body = {
+    name,
+    prompt,
+    model,
+    mode,
+    tools: selectedTools,
+    graph: mode === "custom" ? canvasGraph : { entry: null, nodes: [], edges: [] },
+    visible_to_groups: selectedGroups,
+    status: "published",
+  };
   if (editingAgentId) {
     await api("PUT", `/agents/${editingAgentId}`, body);
   } else {
