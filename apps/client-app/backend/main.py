@@ -41,68 +41,6 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# TEMPORARY — isolating whether app-identity SQL calls work at all,
-# independent of OBO/browser-session scope issues. Remove once diagnosed.
-@app.get("/api/_debug/sql-app-identity")
-def debug_sql_app_identity():
-    try:
-        w = WorkspaceClient()
-        wh = next(w.warehouses.list()).id
-        resp = w.statement_execution.execute_statement(statement="SELECT 1", warehouse_id=wh, wait_timeout="30s")
-        return {"ok": True, "state": resp.status.state.value if resp.status else None}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc)}
-
-
-@app.get("/api/_debug/sql-obo")
-def debug_sql_obo(request: Request):
-    caller = identity.get_caller(request)
-    if not caller.access_token:
-        return {"ok": False, "error": "no forwarded access token on this request"}
-    from databricks.sdk.core import Config
-    try:
-        w = WorkspaceClient(config=Config(token=caller.access_token, auth_type="pat"))
-        wh = next(w.warehouses.list()).id
-        resp = w.statement_execution.execute_statement(statement="SELECT 1", warehouse_id=wh, wait_timeout="30s")
-        return {"ok": True, "state": resp.status.state.value if resp.status else None}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc)}
-
-
-# TEMPORARY — exercises the exact _ResilientWorkspaceClient fallback path
-# real tools use, reporting each stage directly in the HTTP response
-# instead of via app logs (stdout buffering made log-based diagnosis
-# unreliable — no line ever appeared for execute_statement even though
-# the call clearly ran). Remove once the fallback bug is found and fixed.
-@app.get("/api/_debug/sql-resilient")
-def debug_sql_resilient(request: Request):
-    caller = identity.get_caller(request)
-    if not caller.access_token:
-        return {"ok": False, "error": "no forwarded access token on this request"}
-    from interpreter import _build_obo_client, _ResilientWorkspaceClient
-
-    stages: list[str] = []
-    obo_client = _build_obo_client(caller.access_token)
-    w = _ResilientWorkspaceClient(obo_client, WorkspaceClient())
-
-    try:
-        stages.append("calling warehouses.list()")
-        wh = next(w.warehouses.list()).id
-        stages.append(f"warehouses.list() ok, warehouse_id={wh}")
-    except Exception as exc:  # noqa: BLE001
-        stages.append(f"warehouses.list() raised: {exc!r}")
-        return {"ok": False, "stages": stages}
-
-    try:
-        stages.append("calling statement_execution.execute_statement()")
-        resp = w.statement_execution.execute_statement(statement="SELECT 1", warehouse_id=wh, wait_timeout="30s")
-        stages.append(f"execute_statement() ok, state={resp.status.state.value if resp.status else None}")
-        return {"ok": True, "stages": stages}
-    except Exception as exc:  # noqa: BLE001
-        stages.append(f"execute_statement() raised: {exc!r}")
-        return {"ok": False, "stages": stages}
-
-
 # ---------- Model endpoints (real, live from this workspace — US-6.1) ----------
 
 @app.get("/api/model-endpoints")
