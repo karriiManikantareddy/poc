@@ -7,10 +7,14 @@ resources:
       name: "client-app"
       description: "Client App — Connectors, LLM Providers, Agents, Access Control (architecture.drawio page 2)"
       source_code_path: .
-      # Foundation Model calls in this POC run as the app's own identity.
-      # Uncomment to run them as the logged-in employee instead (OBO):
-      # user_api_scopes:
-      #   - serving.serving-endpoints
+      # Confirmed real by testing: without this, the forwarded user token
+      # (X-Forwarded-Access-Token) only carries iam.access-control:read and
+      # iam.current-user:read — not enough to run SQL or call a serving
+      # endpoint as the employee. These two scopes are what the Agents
+      # module's OBO path actually needs.
+      user_api_scopes:
+        - sql
+        - serving.serving-endpoints
 
 targets:
   default:
