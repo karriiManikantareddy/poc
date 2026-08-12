@@ -10,13 +10,13 @@ resources:
       # Confirmed real by testing: without "sql", the forwarded user token
       # only carries iam.access-control:read/iam.current-user:read - not
       # enough to run SQL as the employee. "serving.serving-endpoints" was
-      # a wrong guess - it doesn't cover actually invoking a model; a real
-      # 403 from the live endpoint spelled out the two scopes it actually
-      # checks: model-serving and model-serving-inference.
+      # a wrong guess - it doesn't cover invoking a model; the live endpoint's
+      # 403 named "model-serving" and "model-serving-inference" as required,
+      # but the App resource's own validation rejects the latter as an
+      # invalid scope name - only "model-serving" is a real declarable value.
       user_api_scopes:
         - sql
         - model-serving
-        - model-serving-inference
 
 targets:
   default:
