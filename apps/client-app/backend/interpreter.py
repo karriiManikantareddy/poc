@@ -105,9 +105,22 @@ def _finalize(
         if isinstance(msg, AIMessage) and msg.content:
             final_answer = msg.content
             break
+    if not final_answer:
+        # A pure tool pipeline (e.g. starting from a Tool node with no
+        # Think node ever running) never produces an AIMessage at all —
+        # fall back to the last real tool result rather than an empty
+        # answer, since that's genuinely what this run produced.
+        for entry in reversed(final_state["trace"]):
+            if entry.get("step") == "act":
+                final_answer = str(entry.get("result", ""))
+                break
 
     if not obo_token:
         ran_as = "app identity (no OBO token forwarded)"
+    elif llm_used_obo is None:
+        # A pure tool pipeline never called a model at all — no model
+        # identity to report, just the tools.
+        ran_as = f"employee ({caller_email}) — tools only (this flow never reached a Think node)"
     elif llm_used_obo:
         ran_as = f"employee ({caller_email}) — model + tools"
     else:
@@ -164,7 +177,10 @@ def _run_simple_agent(
 
     def think(state: RunState) -> RunState:
         messages = state["messages"]
-        response = llm_with_tools.invoke(messages)
+        try:
+            response = llm_with_tools.invoke(messages)
+        except Exception as exc:  # noqa: BLE001 - a bad/unreachable model should be a clean 400, not a 500
+            raise AgentError(f"The model call failed: {exc}") from exc
         state["trace"].append({
             "step": "think",
             "content": response.content,
@@ -238,7 +254,6 @@ def _run_custom_agent(
 
     tools_by_id = {t["id"]: t for t in tools_config}
     obo_client = _build_obo_client(obo_token)
-    llm = get_llm(agent.get("model", ""), obo_token=obo_token)
 
     outgoing: dict[str, list[str]] = {nid: [] for nid in nodes}
     incoming: dict[str, list[str]] = {nid: [] for nid in nodes}
@@ -253,7 +268,9 @@ def _run_custom_agent(
     # think<->tool loop-back gives the think node an incoming edge too,
     # so "no incoming edges" can't reliably identify the start once a
     # graph has any loop in it — confirmed by hitting exactly that with
-    # a real think<->tool<->think test graph.
+    # a real think<->tool<->think test graph. Entry can be either node
+    # type — a Tool node can legitimately be the first step (e.g. always
+    # fetch a fixed summary before any reasoning happens).
     entry_node = graph_def.get("entry")
     if not entry_node or entry_node not in nodes:
         raise AgentError("This agent's graph has no starting node set — mark one node as the entry point in the canvas.")
@@ -267,8 +284,10 @@ def _run_custom_agent(
             if not tool_cfg:
                 raise AgentError(f"Tool node '{nid}' references a tool that no longer exists.")
             node_tools[nid] = build_tool(tool_cfg, obo_client)
-            if not incoming[nid]:
-                raise AgentError(f"Tool node '{nid}' ({tool_cfg['name']}) isn't connected to any think node — it can never run.")
+            # A tool node with no incoming edges is only valid as the entry
+            # node — otherwise it's genuinely unreachable dead weight.
+            if not incoming[nid] and nid != entry_node:
+                raise AgentError(f"Tool node '{nid}' ({tool_cfg['name']}) isn't connected from anything and isn't the starting node — it can never run.")
 
     graph = StateGraph(RunState)
     llm_used_obo_holder = {"value": None}
@@ -277,11 +296,16 @@ def _run_custom_agent(
         if node["type"] == "think":
             connected_tool_ids = [t for t in outgoing[nid] if nodes[t]["type"] == "tool"]
             connected_tools = [node_tools[t] for t in connected_tool_ids]
-            bound_llm = llm.bind_tools(connected_tools) if connected_tools else llm
+            node_model = node.get("model") or agent.get("model", "")
+            node_llm = get_llm(node_model, obo_token=obo_token)
+            bound_llm = node_llm.bind_tools(connected_tools) if connected_tools else node_llm
 
-            def think_fn(state: RunState, *, _llm=bound_llm, _nid=nid) -> RunState:
-                response = _llm.invoke(state["messages"])
-                llm_used_obo_holder["value"] = llm.last_call_was_obo
+            def think_fn(state: RunState, *, _llm=bound_llm, _base_llm=node_llm, _nid=nid) -> RunState:
+                try:
+                    response = _llm.invoke(state["messages"])
+                except Exception as exc:  # noqa: BLE001 - a bad/unreachable model should be a clean 400, not a 500
+                    raise AgentError(f"Think node '{_nid}': the model call failed: {exc}") from exc
+                llm_used_obo_holder["value"] = _base_llm.last_call_was_obo
                 state["trace"].append({
                     "step": "think",
                     "node": _nid,
@@ -293,18 +317,37 @@ def _run_custom_agent(
             graph.add_node(nid, think_fn)
         elif node["type"] == "tool":
 
-            def tool_fn(state: RunState, *, _nid=nid, _tool=node_tools[nid]) -> RunState:
+            def tool_fn(state: RunState, *, _nid=nid, _tool=node_tools[nid], _defaults=node.get("default_args") or {}) -> RunState:
                 last = state["messages"][-1]
                 matching = [c for c in getattr(last, "tool_calls", []) if c["name"] == _tool.name]
-                tool_messages = []
-                for call in matching:
+                new_messages = []
+                if matching:
+                    # A connected Think node's model genuinely decided to call
+                    # this tool — pair the result with that real tool_call id,
+                    # exactly as a normal LangChain tool turn expects.
+                    for call in matching:
+                        try:
+                            result = _tool.invoke(call["args"])
+                        except Exception as exc:  # noqa: BLE001 - show the agent its own tool's error
+                            result = f"Error running tool: {exc}"
+                        state["trace"].append({"step": "act", "node": _nid, "tool": _tool.name, "args": call["args"], "result": str(result)})
+                        new_messages.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
+                else:
+                    # No LLM decided to call this — reached as the entry node,
+                    # or chained straight from another tool node. Run it
+                    # unconditionally with its configured default arguments.
+                    # Can't use a ToolMessage here: that type requires pairing
+                    # with a real preceding tool_call id, and a fabricated one
+                    # would make the real Foundation Model API reject the
+                    # payload — a plain message carries the result just as
+                    # well for the next step to read.
                     try:
-                        result = _tool.invoke(call["args"])
-                    except Exception as exc:  # noqa: BLE001 - show the agent its own tool's error
+                        result = _tool.invoke(_defaults)
+                    except Exception as exc:  # noqa: BLE001
                         result = f"Error running tool: {exc}"
-                    state["trace"].append({"step": "act", "node": _nid, "tool": _tool.name, "args": call["args"], "result": str(result)})
-                    tool_messages.append(ToolMessage(content=str(result), tool_call_id=call["id"]))
-                return {"messages": state["messages"] + tool_messages, "trace": state["trace"], "steps": state["steps"] + 1}
+                    state["trace"].append({"step": "act", "node": _nid, "tool": _tool.name, "args": _defaults, "result": str(result)})
+                    new_messages.append(HumanMessage(content=f"[{_tool.name} result] {result}"))
+                return {"messages": state["messages"] + new_messages, "trace": state["trace"], "steps": state["steps"] + 1}
 
             graph.add_node(nid, tool_fn)
         else:

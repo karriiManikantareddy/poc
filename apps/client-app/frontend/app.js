@@ -218,6 +218,7 @@ async function openAgentModal(agent) {
 
   try {
     const endpoints = await api("GET", "/model-endpoints");
+    canvasModelEndpoints = endpoints;
     modelSelect.innerHTML =
       `<option value="">Select a serving endpoint...</option>` +
       endpoints
@@ -273,6 +274,7 @@ function renderToolCheckboxes(selectedToolIds) {
 // ---------------- Custom mode: visual graph canvas ----------------
 let canvasGraph = { entry: null, nodes: [], edges: [] };
 let canvasNodeCounter = 0;
+let canvasModelEndpoints = [];
 
 function applyAgentModeUI(mode) {
   document.getElementById("ag-simple-section").style.display = mode === "custom" ? "none" : "";
@@ -317,7 +319,7 @@ function renderCanvas() {
     const to = nodeById(edge.target);
     if (!from || !to) return;
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", from.x + 160);
+    line.setAttribute("x1", from.x + 180);
     line.setAttribute("y1", from.y + 35);
     line.setAttribute("x2", to.x);
     line.setAttribute("y2", to.y + 35);
@@ -338,14 +340,24 @@ function renderCanvas() {
     div.className = "canvas-node";
     div.dataset.id = node.id;
     const isEntry = canvasGraph.entry === node.id;
-    div.style.cssText = `position:absolute;left:${node.x}px;top:${node.y}px;width:160px;background:var(--surface);border:2px solid ${isEntry ? "var(--red)" : "var(--border)"};border-radius:var(--radius-sm);padding:8px;cursor:move;box-shadow:var(--shadow-1);`;
+    div.style.cssText = `position:absolute;left:${node.x}px;top:${node.y}px;width:180px;background:var(--surface);border:2px solid ${isEntry ? "var(--red)" : "var(--border)"};border-radius:var(--radius-sm);padding:8px;cursor:move;box-shadow:var(--shadow-1);`;
 
-    const toolOptions = node.type === "tool"
-      ? `<select class="canvas-tool-select" data-node="${node.id}" style="width:100%;margin-top:4px;font-size:12px;padding:4px;">
+    let extraFields = "";
+    if (node.type === "tool") {
+      extraFields = `
+        <select class="canvas-tool-select" data-node="${node.id}" style="width:100%;margin-top:4px;font-size:12px;padding:4px;">
           <option value="">Pick a tool...</option>
           ${tools.map((t) => `<option value="${escapeHtml(t.id)}" ${node.tool_id === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
-        </select>`
-      : "";
+        </select>
+        <textarea class="canvas-default-args" data-node="${node.id}" rows="2" placeholder="{} — args used only when no Think node called this (e.g. as the start)" style="width:100%;margin-top:4px;font-size:11px;padding:4px;font-family:monospace;">${escapeHtml(JSON.stringify(node.default_args || {}))}</textarea>
+        <div class="canvas-args-error" data-node="${node.id}" style="color:var(--danger);font-size:10px;"></div>`;
+    } else {
+      extraFields = `
+        <select class="canvas-model-select" data-node="${node.id}" style="width:100%;margin-top:4px;font-size:12px;padding:4px;">
+          <option value="">(use agent's default model)</option>
+          ${canvasModelEndpoints.map((e) => `<option value="${escapeHtml(e.name)}" ${node.model === e.name ? "selected" : ""}>${escapeHtml(e.name)}</option>`).join("")}
+        </select>`;
+    }
 
     div.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;">
@@ -355,7 +367,7 @@ function renderCanvas() {
           <span class="canvas-delete" data-node="${node.id}" title="Delete node" style="cursor:pointer;color:var(--danger);">✕</span>
         </span>
       </div>
-      ${toolOptions}
+      ${extraFields}
       <div class="canvas-handle" data-node="${node.id}" title="Drag to another node to connect" style="position:absolute;right:-8px;bottom:-8px;width:16px;height:16px;border-radius:50%;background:var(--red);cursor:crosshair;"></div>
     `;
     area.appendChild(div);
@@ -367,7 +379,7 @@ function renderCanvas() {
 function wireCanvasNodeEvents() {
   document.querySelectorAll(".canvas-node").forEach((div) => {
     div.addEventListener("mousedown", (e) => {
-      if (e.target.closest("select, .canvas-star, .canvas-delete, .canvas-handle")) return;
+      if (e.target.closest("select, textarea, .canvas-star, .canvas-delete, .canvas-handle")) return;
       const node = nodeById(div.dataset.id);
       const startX = e.clientX;
       const startY = e.clientY;
@@ -407,6 +419,26 @@ function wireCanvasNodeEvents() {
   document.querySelectorAll(".canvas-tool-select").forEach((el) => {
     el.addEventListener("change", () => {
       nodeById(el.dataset.node).tool_id = el.value;
+    });
+  });
+
+  document.querySelectorAll(".canvas-model-select").forEach((el) => {
+    el.addEventListener("change", () => {
+      nodeById(el.dataset.node).model = el.value || undefined;
+    });
+  });
+
+  document.querySelectorAll(".canvas-default-args").forEach((el) => {
+    el.addEventListener("blur", () => {
+      const errorEl = document.querySelector(`.canvas-args-error[data-node="${el.dataset.node}"]`);
+      const raw = el.value.trim() || "{}";
+      try {
+        const parsed = JSON.parse(raw);
+        nodeById(el.dataset.node).default_args = parsed;
+        if (errorEl) errorEl.textContent = "";
+      } catch {
+        if (errorEl) errorEl.textContent = "Not valid JSON — kept the previous value.";
+      }
     });
   });
 
