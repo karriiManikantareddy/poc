@@ -20,6 +20,7 @@ import os
 from typing import NamedTuple, Optional
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from fastapi import Request
 
 ADMIN_GROUP = os.environ.get("AGENT_ADMIN_GROUP", "admins")
@@ -41,20 +42,24 @@ def get_caller(request: Request) -> Caller:
     )
 
 
-def get_caller_groups(email: str) -> list[str]:
+def get_caller_groups(access_token: Optional[str]) -> list[str]:
     """Real SCIM lookup, live on every call — no caching, so a group
     change made directly in Databricks takes effect on the very next
-    request, same live-fetch principle as the rest of this app. Fails
-    safe to no groups (not full access) if the lookup itself errors,
-    since that's the conservative direction for an access-control check."""
+    request, same live-fetch principle as the rest of this app.
+
+    Looked up AS the employee (using their own forwarded token), not as
+    the app's own identity — confirmed by testing that the app's own
+    service principal doesn't have rights to read another user's SCIM
+    record, so `current_user.me()` under the employee's own token is what
+    actually works, and it's also the more correct semantic anyway (you
+    can always read your own group membership). Fails safe to no groups
+    (not full access) if the lookup itself errors."""
     try:
-        w = WorkspaceClient()
-        users = list(w.users.list(filter=f'userName eq "{email}"', attributes="groups"))
+        w = WorkspaceClient(config=Config(token=access_token)) if access_token else WorkspaceClient()
+        me = w.current_user.me()
     except Exception:  # noqa: BLE001 - fail safe, don't crash the request over a transient SCIM error
         return []
-    if not users:
-        return []
-    return [g.display for g in (users[0].groups or []) if g.display]
+    return [g.display for g in (me.groups or []) if g.display]
 
 
 def resolve_access(request: Request) -> tuple[list[str], bool]:
@@ -62,7 +67,7 @@ def resolve_access(request: Request) -> tuple[list[str], bool]:
     caller = get_caller(request)
     if not caller.known:
         return [], True  # local dev only — see module docstring
-    groups = get_caller_groups(caller.email)
+    groups = get_caller_groups(caller.access_token)
     return groups, ADMIN_GROUP in groups
 
 
