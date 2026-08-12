@@ -105,13 +105,13 @@ class _FallbackProxy:
             try:
                 result = obo_attr(*args, **kwargs)
                 if hasattr(result, "__next__"):
-                    result = list(result)  # force pagination now, still inside this try
+                    result = iter(list(result))  # force pagination now, keep it a real iterator
                 return result
             except Exception as obo_exc:  # noqa: BLE001 - any OBO failure degrades to app identity
                 try:
                     result = app_attr(*args, **kwargs)
                     if hasattr(result, "__next__"):
-                        result = list(result)
+                        result = iter(list(result))
                     return result
                 except Exception:  # noqa: BLE001 - app identity also failed; surface the OBO error
                     raise obo_exc
