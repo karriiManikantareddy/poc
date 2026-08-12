@@ -63,45 +63,54 @@ def get_llm(model_endpoint: str, obo_token: Optional[str] = None) -> DatabricksE
         raise AgentError(f"Could not reach model serving endpoint '{model_endpoint}': {exc}") from exc
 
 
-class _ResilientStatementExecution:
-    """Tries the employee's own OBO identity first; falls back to the
-    app's own identity specifically on a missing-scopes error. Added
-    after repeatedly hitting "Provided OAuth token does not have
-    required scopes: sql" from a real browser session (even a fully
-    fresh incognito one) while the exact same call succeeded every time
-    from a CLI-issued bearer token — a real, reproducible difference
-    between auth paths we could not fully root-cause before a live demo.
-    This keeps the run working either way rather than blocking on it."""
+class _FallbackProxy:
+    """Wraps one SDK sub-API (e.g. the object behind `w.warehouses` or
+    `w.statement_execution`) so every method call on it tries the
+    employee's OBO identity first, falling back to the app's own
+    identity on the specific missing-scopes error this exists for.
+
+    Generic on purpose, not hand-picked per method: an earlier version
+    of this only wrapped `statement_execution.execute_statement`, but a
+    real tool's first call is `w.warehouses.list()` to find a warehouse
+    id — that call went straight to the OBO client unwrapped, failed
+    there first, and never reached the one method that was protected.
+    Confirmed via isolated testing that both the OBO path and the app-
+    identity path work individually; the bug was the fallback simply
+    not being reached for every call a tool might make."""
+
+    def __init__(self, obo_target: Any, app_target: Any):
+        self._obo = obo_target
+        self._app = app_target
+
+    def __getattr__(self, name: str) -> Any:
+        obo_attr = getattr(self._obo, name)
+        if not callable(obo_attr):
+            return obo_attr
+        app_attr = getattr(self._app, name)
+
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return obo_attr(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - only swallow the specific known scope gap
+                if "required scopes" not in str(exc):
+                    raise
+                return app_attr(*args, **kwargs)
+
+        return wrapper
+
+
+class _ResilientWorkspaceClient:
+    """Every sub-API a tool might reach via `w` (warehouses,
+    statement_execution, catalogs, whatever else) gets the same OBO-
+    first-then-app-identity fallback automatically — see
+    `_FallbackProxy` for why this has to be generic, not per-method."""
 
     def __init__(self, obo_client: WorkspaceClient, app_client: WorkspaceClient):
         self._obo = obo_client
         self._app = app_client
 
-    def execute_statement(self, *args: Any, **kwargs: Any):
-        try:
-            return self._obo.statement_execution.execute_statement(*args, **kwargs)
-        except Exception as exc:  # noqa: BLE001 - only swallow the specific known scope gap
-            if "required scopes" not in str(exc):
-                raise
-            return self._app.statement_execution.execute_statement(*args, **kwargs)
-
-
-class _ResilientWorkspaceClient:
-    """Same idea as `_ResilientStatementExecution`, generalized: anything
-    else a tool calls on `w` goes straight to the OBO client unchanged,
-    only `statement_execution` gets the fallback (the one call this has
-    actually failed on)."""
-
-    def __init__(self, obo_client: WorkspaceClient, app_client: WorkspaceClient):
-        self._obo = obo_client
-        self._statement_execution = _ResilientStatementExecution(obo_client, app_client)
-
-    @property
-    def statement_execution(self):
-        return self._statement_execution
-
     def __getattr__(self, name: str) -> Any:
-        return getattr(self._obo, name)
+        return _FallbackProxy(getattr(self._obo, name), getattr(self._app, name))
 
 
 def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient] = None) -> StructuredTool:

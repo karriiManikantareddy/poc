@@ -486,6 +486,79 @@
     "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
   },
   {
+    "id": "run-c426cddc",
+    "agent_id": "agent-a2f2d523",
+    "question": "hi",
+    "answer": "It's nice to meet you. Is there something I can help you with regarding project and ticket status?",
+    "trace": [
+      {
+        "step": "think",
+        "content": "It's nice to meet you. Is there something I can help you with regarding project and ticket status?",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:36:50.530615+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-3661004b",
+    "agent_id": "agent-a2f2d523",
+    "question": "what is this functions do ?",
+    "answer": "These functions are used to retrieve information about tickets in a project management system. \n\nThe first function, `get_ticket_summary`, provides a high-level overview of the ticket status across all projects. It returns the actual count of tickets grouped by their status.\n\nThe second function, `get_project_tickets`, gives a more detailed view of ticket counts by status for a specific project. You need to provide the exact name of the project to use this function.\n\nLet me know if you have any specific questions or if you'd like to use one of these functions!",
+    "trace": [
+      {
+        "step": "think",
+        "content": "These functions are used to retrieve information about tickets in a project management system. \n\nThe first function, `get_ticket_summary`, provides a high-level overview of the ticket status across all projects. It returns the actual count of tickets grouped by their status.\n\nThe second function, `get_project_tickets`, gives a more detailed view of ticket counts by status for a specific project. You need to provide the exact name of the project to use this function.\n\nLet me know if you have any specific questions or if you'd like to use one of these functions!",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:37:06.666653+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-57736654",
+    "agent_id": "agent-a2f2d523",
+    "question": "full info and list of employes",
+    "answer": "It seems like there is an issue with the OAuth token not having the required scopes for SQL. I'm a large language model, I don't have the ability to access or modify your OAuth token. However, I can suggest that you check the scopes of your OAuth token and ensure that it has the required scopes for SQL.\n\nAs for your original question, I can try to provide a general answer. However, I don't have any information about the employees or the project you are referring to. If you could provide more context or clarify your question, I'll do my best to provide a helpful response.",
+    "trace": [
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_project_tickets"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_project_tickets",
+        "args": {
+          "project_name": "your_project_name"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: f46bee8d-c539-442a-8462-098c92db6794]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "",
+        "tool_calls": [
+          "get_ticket_summary"
+        ]
+      },
+      {
+        "step": "act",
+        "tool": "get_ticket_summary",
+        "args": {},
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: 3bfaafe0-8624-4132-a59d-5a38fb961f40]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "content": "It seems like there is an issue with the OAuth token not having the required scopes for SQL. I'm a large language model, I don't have the ability to access or modify your OAuth token. However, I can suggest that you check the scopes of your OAuth token and ensure that it has the required scopes for SQL.\n\nAs for your original question, I can try to provide a general answer. However, I don't have any information about the employees or the project you are referring to. If you could provide more context or clarify your question, I'll do my best to provide a helpful response.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:37:34.873004+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
     "id": "run-98da2aaf",
     "agent_id": "agent-f51009fc",
     "question": "Who's the lead on Test Project 1?",
@@ -703,6 +776,39 @@
       }
     ],
     "timestamp": "2026-08-12T20:25:07.196714+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-3891d8e2",
+    "agent_id": "agent-f51009fc",
+    "question": "Who's the lead on Test Project 1?",
+    "answer": "Unfortunately, the get_project_lead function was unable to execute due to an authentication error. However, I can suggest that you would typically find the project lead by checking the project's details or contacting the project manager. If you have any more information about the project or its organization, I may be able to help you further.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-1-eomx",
+        "content": "",
+        "tool_calls": [
+          "get_project_lead"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-2-pp0u",
+        "tool": "get_project_lead",
+        "args": {
+          "project_name": "Test Project 1"
+        },
+        "result": "Error running tool: Provided OAuth token does not have required scopes: sql [ReqId: dd0c82d8-9bed-4712-850c-ce8e2f9a6d7e]. Config: host=https://dbc-4c330772-0636.cloud.databricks.com, account_id=06d8302d-ac55-45d8-bc3d-49988009a26d, workspace_id=7474649804753458, discovery_url=https://dbc-4c330772-0636.cloud.databricks.com/oidc/.well-known/oauth-authorization-server, token=***, token_audience=https://dbc-4c330772-0636.cloud.databricks.com/oidc/v1/token, client_id=d7daf1f6-827f-45e7-9b91-9de46e1ad032, client_secret=***, auth_type=pat. Env: DATABRICKS_HOST, DATABRICKS_WORKSPACE_ID, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET"
+      },
+      {
+        "step": "think",
+        "node": "node-3-3yy6",
+        "content": "Unfortunately, the get_project_lead function was unable to execute due to an authentication error. However, I can suggest that you would typically find the project lead by checking the project's details or contacting the project manager. If you have any more information about the project or its organization, I may be able to help you further.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-12T20:35:46.442979+00:00",
     "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
   }
 ]
