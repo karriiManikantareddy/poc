@@ -57,8 +57,10 @@ def get_caller_groups(access_token: Optional[str]) -> list[str]:
     try:
         w = WorkspaceClient(config=Config(token=access_token)) if access_token else WorkspaceClient()
         me = w.current_user.me()
-    except Exception:  # noqa: BLE001 - fail safe, don't crash the request over a transient SCIM error
+    except Exception as exc:  # noqa: BLE001 - fail safe, don't crash the request over a transient SCIM error
+        print(f"[identity] group lookup failed: {exc!r}")  # TEMP diagnostic
         return []
+    print(f"[identity] me.groups={me.groups!r}")  # TEMP diagnostic
     return [g.display for g in (me.groups or []) if g.display]
 
 
