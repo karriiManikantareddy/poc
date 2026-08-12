@@ -15,9 +15,6 @@ in the main project for the full picture.
   yet" placeholders in the UI, not fake data. Its `databricks.yml` has no
   hardcoded workspace host on purpose: the target workspace comes entirely
   from whichever GitHub Environment's secrets are active for a given run.
-- `apps/poc-placeholder/` — superseded by `apps/client-app/` above; kept
-  only as the original AppKit scaffold this repo started from, no longer
-  referenced by the deploy workflow.
 - `.github/workflows/deploy-client.yml` — the actual deploy job. Triggered via
   `workflow_dispatch` with a `client_environment` input naming which GitHub
   Environment (and therefore which client's credentials) to use.
