@@ -3,8 +3,8 @@ Lakeflow Connect). Real Unity Catalog Connection + Lakeflow ingestion Pipeline
 objects via databricks-sdk — no sync engine of our own to build or maintain.
 
 Two kinds of source, confirmed against current Databricks docs (not assumed):
-- Key/host/password sources (databases) — the whole thing (Connection +
-  Pipeline) can be created here, no browser hop.
+- Credential-based sources (databases, BigQuery) — the whole thing
+  (Connection + Pipeline) can be created here, no browser hop.
 - OAuth SaaS sources (Salesforce, HubSpot, Workday, ServiceNow, Slack,
   Zendesk, Jira, etc.) — Databricks does not expose an API to complete the
   OAuth consent handshake; that one step has to happen in the workspace's
@@ -33,13 +33,22 @@ from databricks.sdk.service.pipelines import (
 )
 
 # Connection types with a well-documented, verified options schema — plain
-# host/port/user/password, no OAuth consent screen needed. Everything else
-# in ConnectionType is real and shown to the user, just routed to the
+# credential fields, no OAuth consent screen needed. Everything else in
+# ConnectionType is real and shown to the user, just routed to the
 # "finish in Databricks" flow instead of a guessed form.
-HOST_BASED_TYPES: dict[str, list[str]] = {
-    "POSTGRESQL": ["host", "port", "user", "password"],
-    "MYSQL": ["host", "port", "user", "password"],
-    "SQLSERVER": ["host", "port", "user", "password", "database"],
+HOST_BASED_TYPES: dict[str, dict[str, list[str]]] = {
+    "POSTGRESQL": {"required": ["host", "port", "user", "password"], "optional": []},
+    "MYSQL": {"required": ["host", "port", "user", "password"], "optional": []},
+    "SQLSERVER": {"required": ["host", "port", "user", "password", "database"], "optional": []},
+    # Verified against a real workspace: the option key is "projectId"
+    # (camelCase — the docs' "Project ID" label doesn't match the actual
+    # API field name). Optional; defaults to the key's own project_id when
+    # omitted. Confirmed omitting it works — and confirmed separately that
+    # sending it as an empty string instead of omitting it is a real,
+    # reproducible way to make Databricks' own "Test Connection" throw a
+    # NumberFormatException deep in its BigQuery connector (creation itself
+    # succeeds either way; the crash is specific to the connectivity probe).
+    "BIGQUERY": {"required": ["GoogleServiceAccountKeyJson"], "optional": ["projectId"]},
 }
 
 
@@ -57,15 +66,19 @@ def list_connection_types() -> list[dict[str, Any]]:
     curated or invented subset. `form` tells the UI whether we can render
     a real inline form (host-based) or must hand off to Databricks (OAuth
     and everything else undocumented)."""
-    return [
-        {
-            "type": t.value,
-            "form": "host" if t.value in HOST_BASED_TYPES else "external",
-            "fields": HOST_BASED_TYPES.get(t.value, []),
-        }
-        for t in ConnectionType
-        if t.value != "UNKNOWN_CONNECTION_TYPE"
-    ]
+    result = []
+    for t in ConnectionType:
+        if t.value == "UNKNOWN_CONNECTION_TYPE":
+            continue
+        spec = HOST_BASED_TYPES.get(t.value)
+        fields = (
+            [{"name": f, "required": True} for f in spec["required"]]
+            + [{"name": f, "required": False} for f in spec["optional"]]
+            if spec
+            else []
+        )
+        result.append({"type": t.value, "form": "host" if spec else "external", "fields": fields})
+    return result
 
 
 def list_connections() -> list[dict[str, Any]]:
@@ -91,10 +104,17 @@ def create_host_connection(name: str, connection_type: str, fields: dict[str, st
             f"'{connection_type}' has no verified options schema in this app — create it in Databricks "
             "(Catalog > gear icon > Connections > Create connection), then refresh the list here."
         )
-    required = HOST_BASED_TYPES[connection_type]
-    missing = [f for f in required if not fields.get(f)]
+    spec = HOST_BASED_TYPES[connection_type]
+    missing = [f for f in spec["required"] if not fields.get(f)]
     if missing:
         raise ConnectorError(f"Missing required field(s) for {connection_type}: {', '.join(missing)}")
+
+    # Optional fields are only included if actually filled in — sending an
+    # empty string for an unset optional field (instead of omitting it) is
+    # exactly the kind of thing that can trip a downstream config-parsing
+    # bug (hit this for real testing BigQuery's optional ProjectId).
+    options = {f: fields[f] for f in spec["required"]}
+    options.update({f: fields[f] for f in spec["optional"] if fields.get(f)})
 
     # Verified against a real workspace: passing password/user directly in
     # `options` works and Databricks redacts them automatically on read-back
@@ -107,7 +127,7 @@ def create_host_connection(name: str, connection_type: str, fields: dict[str, st
         info = w.connections.create(
             name=name,
             connection_type=ConnectionType(connection_type),
-            options=fields,
+            options=options,
             comment=comment or None,
         )
     except DatabricksError as exc:

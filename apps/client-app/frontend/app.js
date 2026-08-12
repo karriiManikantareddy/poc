@@ -375,10 +375,14 @@ document.getElementById("cn-type").addEventListener("change", () => {
     area.innerHTML = "";
   } else if (info.form === "host") {
     area.innerHTML = info.fields
-      .map(
-        (f) =>
-          `<label for="cn-field-${f}">${f}</label><input type="${f === "password" ? "password" : "text"}" id="cn-field-${f}" placeholder="${f}">`
-      )
+      .map((f) => {
+        const label = `${f.name}${f.required ? "" : " (optional)"}`;
+        if (f.name === "GoogleServiceAccountKeyJson") {
+          return `<label for="cn-field-${f.name}">${label}</label><textarea id="cn-field-${f.name}" rows="6" class="code-input" placeholder="Paste the full contents of the service account key .json file"></textarea>`;
+        }
+        const inputType = f.name === "password" ? "password" : "text";
+        return `<label for="cn-field-${f.name}">${label}</label><input type="${inputType}" id="cn-field-${f.name}" placeholder="${f.name}">`;
+      })
       .join("");
   } else {
     area.innerHTML = `<div class="msg-pending" style="margin-top:12px;">
@@ -407,9 +411,24 @@ document.getElementById("connection-modal-save").addEventListener("click", async
     return;
   }
   const fields = {};
-  info.fields.forEach((f) => {
-    fields[f] = document.getElementById(`cn-field-${f}`).value;
-  });
+  const missingRequired = [];
+  for (const f of info.fields) {
+    const value = document.getElementById(`cn-field-${f.name}`).value;
+    fields[f.name] = value;
+    if (f.required && !value.trim()) missingRequired.push(f.name);
+  }
+  if (missingRequired.length) {
+    feedback(resultEl, "err", `Missing required field(s): ${escapeHtml(missingRequired.join(", "))}`);
+    return;
+  }
+  if (fields.GoogleServiceAccountKeyJson) {
+    try {
+      JSON.parse(fields.GoogleServiceAccountKeyJson);
+    } catch {
+      feedback(resultEl, "err", "GoogleServiceAccountKeyJson isn't valid JSON — paste the full, unmodified contents of the key file.");
+      return;
+    }
+  }
   feedback(resultEl, "pending", "Creating...");
   try {
     await api("POST", "/connections", { name, connection_type: type, fields });
