@@ -90,11 +90,18 @@ class _FallbackProxy:
 
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
-                return obo_attr(*args, **kwargs)
+                result = obo_attr(*args, **kwargs)
+                print(f"[fallback-proxy] '{name}' succeeded via OBO identity")  # TEMP diagnostic
+                return result
             except Exception as exc:  # noqa: BLE001 - only swallow the specific known scope gap
+                print(f"[fallback-proxy] '{name}' failed via OBO: {exc!r}")  # TEMP diagnostic
                 if "required scopes" not in str(exc):
+                    print(f"[fallback-proxy] '{name}' error doesn't match fallback condition, re-raising")  # TEMP diagnostic
                     raise
-                return app_attr(*args, **kwargs)
+                print(f"[fallback-proxy] '{name}' falling back to app identity now")  # TEMP diagnostic
+                result = app_attr(*args, **kwargs)
+                print(f"[fallback-proxy] '{name}' succeeded via app identity fallback")  # TEMP diagnostic
+                return result
 
         return wrapper
 
@@ -124,7 +131,9 @@ def build_tool(tool_config: dict[str, Any], obo_client: Optional[WorkspaceClient
     the injected `w`, that call silently reverts to the app's own identity —
     we don't sandbox imports away, so this can't be fully prevented, only
     documented (see the New Tool modal's placeholder text)."""
-    w = _ResilientWorkspaceClient(obo_client, WorkspaceClient()) if obo_client else WorkspaceClient()
+    print(f"[build_tool] obo_client is {'set' if obo_client is not None else 'None'} for tool '{tool_config.get('name')}'")  # TEMP diagnostic
+    w = _ResilientWorkspaceClient(obo_client, WorkspaceClient()) if obo_client is not None else WorkspaceClient()
+    print(f"[build_tool] injected w is {type(w).__name__}")  # TEMP diagnostic
     namespace: dict[str, Any] = {"w": w}
     try:
         exec(tool_config["code"], namespace)  # noqa: S102 - intentional, this IS the Action Pack execution model
