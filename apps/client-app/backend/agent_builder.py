@@ -115,7 +115,12 @@ def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
 
     required_args = [f["arg"] for f in filters if f.get("required")]
     optional_args = [f["arg"] for f in filters if not f.get("required")]
-    arg_sig = ", ".join([f"{a}: str" for a in required_args] + [f"{a}: str = ''" for a in optional_args])
+    # "limit" is universal, not something the model proposes per tool — a
+    # caller asking "top 10" vs "list everyone" needs to control row count
+    # at run time, not just get whatever cap the generator baked in. Capped
+    # at 200 regardless of what's requested — the same ceiling that fixed
+    # the earlier context-overflow bug, so a bad ask here can't reintroduce it.
+    arg_sig = ", ".join([f"{a}: str" for a in required_args] + [f"{a}: str = ''" for a in optional_args] + ["limit: str = '50'"])
 
     # Every filter is applied "if truthy" regardless of required/optional —
     # required only changes whether the function signature demands a value;
@@ -144,7 +149,7 @@ def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
             fallback_sql = ({base_sql!r}).replace({table!r}, candidate_table)
             if conditions:
                 fallback_sql += " WHERE " + " AND ".join(conditions)
-            fallback_sql += " LIMIT 200"
+            fallback_sql += f" LIMIT {{limit_n}}"
             fb_resp = w.statement_execution.execute_statement(
                 statement=fallback_sql,
                 warehouse_id=warehouse_id,
@@ -163,13 +168,17 @@ def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
     return f'''def {name}({arg_sig}) -> str:
     from databricks.sdk.service.sql import StatementParameterListItem
     {_WAREHOUSE_PICK}
+    try:
+        limit_n = min(max(int(limit), 1), 200) if limit else 50
+    except (TypeError, ValueError):
+        limit_n = 50
     conditions = []
     params = []
     {filter_lines if filter_lines else "pass"}
     sql = {base_sql!r}
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
-    sql += " LIMIT 200"
+    sql += f" LIMIT {{limit_n}}"
     resp = w.statement_execution.execute_statement(
         statement=sql,
         warehouse_id=warehouse_id,
@@ -256,7 +265,8 @@ def _validate_and_render_tool(
         spec["fallback_column"] = None
 
     code = _render_tool_code(spec, catalog, schema)
-    return {"name": name, "description": spec.get("description", ""), "code": code}
+    description = spec.get("description", "") + " Accepts an optional 'limit' argument (a number as a string, default 50, max 200) to control how many rows come back — e.g. pass limit='10' for a top-10 request, or leave it default for a general listing."
+    return {"name": name, "description": description, "code": code}
 
 
 def build_agent_plan(
