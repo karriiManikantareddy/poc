@@ -3,13 +3,21 @@ English task description plus the real, live schema of a connected source.
 
 This is deliberately NOT "the LLM writes arbitrary Python and we exec it
 blind." The model only ever proposes a small, structured plan (which table,
-which SQL, which parameters, one optional fallback column, one optional
-dependency on another tool) as JSON; every table/column name it names is
-checked against a real schema introspection before anything runs, and the
-actual Python tool code is rendered from ONE fixed, hand-written template —
-the model never writes the exec()'d code directly. That keeps
-"auto-generated" honest without trusting free-form LLM code on a live
-data source.
+which base query, which optional filters, one optional fallback column,
+one optional dependency on another tool) as JSON; every table/column name
+it names is checked against a real schema introspection before anything
+runs, and the actual Python tool code — including the WHERE-clause
+construction for filters — is rendered from ONE fixed, hand-written
+template. The model never writes SQL parameter binding or a raw ":param"
+string itself; it only says which column an argument filters on, and the
+template builds a correct, safely-conditional WHERE clause from that. That
+matters for a real reason found testing this against a live agent: asking
+a static ":lead_name IS NULL OR lead_name = :lead_name" pattern to skip
+filtering when unset doesn't work, because an omitted argument still binds
+as an empty string, not SQL NULL — so "list everyone" would have silently
+broken into "list no one." Building the WHERE clause in Python instead of
+asking the model to hand-write correct optional-parameter SQL avoids that
+whole class of mistake.
 
 Two graph topologies, chosen automatically, not by the model:
 - Star (default): one Think node bound to every independent Tool node,
@@ -44,14 +52,13 @@ _SYSTEM_TEMPLATE = """You are designing tools for a data-analysis agent. You are
 
 Hard rules:
 - Only ever reference table names and column names that literally appear in the schema below, using the exact spelling shown. Never invent one.
-- Each tool runs exactly ONE SQL statement against exactly one table listed under "table" (fully qualified as catalog.schema.table).
-- Use named parameters in the SQL as :param_name, and list every one of them in "args". Every :param_name in the SQL must appear in "args", and every entry in "args" must be used as :param_name somewhere in the SQL.
-- Prefer doing joins, counts, and aggregations inside the SQL itself (GROUP BY, COUNT, JOIN) rather than returning raw rows for the caller to manually tally — SQL is reliable at counting, free-text reasoning over raw rows is not.
+- Each tool's "base_sql" is exactly one SELECT statement (with any JOINs it needs) and must NOT include a WHERE clause, a LIMIT, or any ":param" placeholder — those are added automatically. Put every table this tool touches directly in the FROM/JOIN of base_sql; "table" is just the primary one, used for validation.
+- Prefer doing joins, counts, and aggregations inside base_sql itself (GROUP BY, COUNT, JOIN) rather than returning raw rows for the caller to manually tally — SQL is reliable at counting, free-text reasoning over raw rows is not.
 - If a join can multiply rows (e.g. joining to a table with many rows per parent, like tickets per employee), use SELECT DISTINCT or aggregate instead of returning every joined row — otherwise the result can be enormous even though the answer is small.
-- Always include a LIMIT (e.g. LIMIT 50) unless the query already aggregates down to a handful of groups. A result that's too large to fit in the caller's context is treated as a failure, not a success.
-- Never propose two tools that run essentially the same query with only the row limit or a name changed — that is one tool, not two. Every tool in your output must answer a genuinely different question. If you're tempted to write a second tool just to cap the row count differently, don't — adjust the one tool's LIMIT instead.
+- This agent will be asked many different follow-up questions later, not just the exact task wording above. For EVERY column in base_sql's own SELECT list that identifies a specific named thing (a person's name, a project name, a status, an ID, an email) — not just ones the task literally mentions filtering by — add a matching entry to "filters": {{"arg": "lead_name", "column": "p.lead_name", "required": false}} ("column" may be qualified with the table alias used in base_sql). Go through the SELECT list column by column and ask "would someone plausibly want to filter by this specific value later?" — if yes, it needs a filter, even if the task text never says the word "filter" or mentions that column by name. A tool with no way to filter on a column it selects forces the model to eyeball-search raw text for one matching row later, which is unreliable and has produced wrong answers. Set "required": true only when the tool is meaningless without that value; leave it false when the tool should also work as a "list everything" call.
 - If the task implies "if it's not in the obvious table, check every table" for a concept (e.g. leads, customers), set "fallback_column" to the single column name that identifies that concept elsewhere (e.g. "lead_name"). Leave it null if the task doesn't need that.
 - If a tool's argument value can only be known from ANOTHER tool's result (e.g. "find the lead, then look up that lead's workload"), set "depends_on" to that other tool's exact name. Leave it null if the tool can run on its own with arguments the user directly provides. Don't invent a dependency that isn't really there — most tools should have depends_on: null.
+- Never propose two tools whose base_sql and filters are essentially the same thing — every tool must answer a genuinely different question.
 - Output ONLY one JSON object. No prose, no markdown code fences, nothing before or after it.
 
 Schema (catalog "{catalog}", schema "{schema}"):
@@ -67,8 +74,10 @@ Output exactly this shape:
       "name": "snake_case_name",
       "description": "one sentence a model would use to decide when to call this",
       "table": "{catalog}.{schema}.table_name",
-      "sql": "SELECT ... FROM {catalog}.{schema}.table_name WHERE col = :param",
-      "args": ["param"],
+      "base_sql": "SELECT DISTINCT col1, col2 FROM {catalog}.{schema}.table_name t JOIN {catalog}.{schema}.other_table o ON t.id = o.fk",
+      "filters": [
+        {{"arg": "some_value", "column": "t.some_column", "required": false}}
+      ],
       "fallback_column": null,
       "depends_on": null
     }}
@@ -99,13 +108,24 @@ _WAREHOUSE_PICK = '''warehouses = list(w.warehouses.list())
 
 def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
     name = spec["name"]
-    args: list[str] = spec.get("args") or []
-    sql: str = spec["sql"]
+    base_sql: str = spec["base_sql"]
     table: str = spec["table"]
+    filters: list[dict[str, Any]] = spec.get("filters") or []
     fallback_column: Optional[str] = spec.get("fallback_column") or None
 
-    arg_sig = ", ".join(f"{a}: str" for a in args)
-    params_repr = ", ".join(f'StatementParameterListItem(name={a!r}, value=str({a}))' for a in args)
+    required_args = [f["arg"] for f in filters if f.get("required")]
+    optional_args = [f["arg"] for f in filters if not f.get("required")]
+    arg_sig = ", ".join([f"{a}: str" for a in required_args] + [f"{a}: str = ''" for a in optional_args])
+
+    # Every filter is applied "if truthy" regardless of required/optional —
+    # required only changes whether the function signature demands a value;
+    # this keeps the query-building logic uniform instead of two code paths.
+    filter_lines = "\n    ".join(
+        f'''if {f["arg"]}:
+        conditions.append({f["column"] + " = :" + f["arg"]!r})
+        params.append(StatementParameterListItem(name={f["arg"]!r}, value=str({f["arg"]})))'''
+        for f in filters
+    )
 
     fallback_block = ""
     if fallback_column:
@@ -121,11 +141,14 @@ def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
         )
         for row in (discover_resp.result.data_array if discover_resp.result else []):
             candidate_table = f"{catalog}.{schema}.{{row[0]}}"
-            fallback_sql = ({sql!r}).replace({table!r}, candidate_table)
+            fallback_sql = ({base_sql!r}).replace({table!r}, candidate_table)
+            if conditions:
+                fallback_sql += " WHERE " + " AND ".join(conditions)
+            fallback_sql += " LIMIT 200"
             fb_resp = w.statement_execution.execute_statement(
                 statement=fallback_sql,
                 warehouse_id=warehouse_id,
-                parameters=[{params_repr}],
+                parameters=params,
                 wait_timeout="30s",
             )
             if fb_resp.result and fb_resp.result.data_array:
@@ -140,10 +163,17 @@ def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
     return f'''def {name}({arg_sig}) -> str:
     from databricks.sdk.service.sql import StatementParameterListItem
     {_WAREHOUSE_PICK}
+    conditions = []
+    params = []
+    {filter_lines if filter_lines else "pass"}
+    sql = {base_sql!r}
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " LIMIT 200"
     resp = w.statement_execution.execute_statement(
-        statement={sql!r},
+        statement=sql,
         warehouse_id=warehouse_id,
-        parameters=[{params_repr}],
+        parameters=params,
         wait_timeout="30s",
     )
     failed = bool(resp.status and resp.status.state.value == "FAILED")
@@ -169,72 +199,61 @@ def _validate_and_render_tool(
     schema: str,
     known_tables_lower: set[str],
     known_columns_lower: set[str],
-    seen_sql: set[str],
+    seen: set[tuple],
     warnings: list[str],
 ) -> Optional[dict[str, Any]]:
-    """One tool spec's worth of validation against the real schema, plus the
-    two hard safety nets (dedup, LIMIT cap) — split out from
-    build_agent_plan so that function reads as an overview, not a wall of
-    per-tool checks. Returns None (with a warning appended) for anything
-    that doesn't validate, rather than raising — one bad tool in a batch
-    shouldn't sink an otherwise-good plan."""
+    """One tool spec's worth of validation against the real schema — split
+    out from build_agent_plan so that function reads as an overview, not a
+    wall of per-tool checks. Returns None (with a warning appended) for
+    anything that doesn't validate, rather than raising — one bad tool in a
+    batch shouldn't sink an otherwise-good plan."""
     name = spec.get("name")
     table = spec.get("table")
-    sql = spec.get("sql")
-    args = spec.get("args") or []
-    if not name or not table or not sql:
+    base_sql = spec.get("base_sql")
+    filters = spec.get("filters") or []
+    if not name or not table or not base_sql:
         warnings.append(f"Skipped a malformed tool spec: {spec}")
         return None
     if table.lower() not in known_tables_lower:
         warnings.append(f"Tool '{name}' references table '{table}', which isn't in {catalog}.{schema} — skipped.")
         return None
+    if re.search(r"\bwhere\b", base_sql, re.IGNORECASE) or ":" in base_sql:
+        warnings.append(f"Tool '{name}': base_sql contained a WHERE clause or a :param placeholder — stripped, filtering happens via 'filters' only.")
+        base_sql = re.split(r"\bwhere\b", base_sql, maxsplit=1, flags=re.IGNORECASE)[0].rstrip()
+        spec["base_sql"] = base_sql
+
+    valid_filters = []
+    for f in filters:
+        arg, column = f.get("arg"), f.get("column")
+        if not arg or not column:
+            warnings.append(f"Tool '{name}': skipped a malformed filter {f}.")
+            continue
+        bare_column = column.split(".")[-1].lower()
+        if bare_column not in known_columns_lower:
+            warnings.append(f"Tool '{name}': filter column '{column}' doesn't match any known column — dropped.")
+            continue
+        valid_filters.append(f)
+    spec["filters"] = valid_filters
 
     # Hard safety net, not just a prompt instruction: hit this for real
     # generating an employee/project/lead agent, where the model proposed
-    # "list_employees_and_projects" (LIMIT 200) and
-    # "limit_employees_and_projects" (LIMIT 50) — the identical query twice
-    # under two names because it read two verbs in the task text as two
-    # separate operations. Normalize away the LIMIT clause and
-    # whitespace/case before comparing, so this class of near-duplicate
-    # can't slip through even when the prompt instruction alone doesn't
-    # stop it.
-    normalized = re.sub(r"\blimit\s+\d+\b", "", sql, flags=re.IGNORECASE)
-    normalized = re.sub(r"\s+", " ", normalized).strip().lower()
-    if normalized in seen_sql:
-        warnings.append(f"Tool '{name}' runs the same query as an earlier tool (just a different row limit) — skipped as a duplicate.")
+    # "list_employees_and_projects" and "limit_employees_and_projects" —
+    # the identical query twice under two names, just a different row cap.
+    # Now that LIMIT is never model-controlled, a duplicate can only be a
+    # genuinely identical base_sql + filter set.
+    dedup_key = (
+        re.sub(r"\s+", " ", base_sql).strip().lower(),
+        tuple(sorted(f["arg"] for f in valid_filters)),
+    )
+    if dedup_key in seen:
+        warnings.append(f"Tool '{name}' runs the same query and filters as an earlier tool — skipped as a duplicate.")
         return None
-    seen_sql.add(normalized)
-
-    # Args and :params in the SQL must match in BOTH directions. An arg
-    # declared but never used is just noise; a :param used in the SQL but
-    # never declared as an arg silently produces an unbound parameter at
-    # execution time — self-heal by recomputing "args" from what the SQL
-    # actually references, which is authoritative.
-    used_params = sorted(set(re.findall(r":(\w+)", sql)))
-    declared = set(args)
-    if declared != set(used_params):
-        missing = [p for p in used_params if p not in declared]
-        unused = [a for a in args if a not in used_params]
-        if missing:
-            warnings.append(f"Tool '{name}': {':' + ', :'.join(missing)} used in SQL but not declared — added automatically.")
-        if unused:
-            warnings.append(f"Tool '{name}': arg(s) {', '.join(unused)} declared but never used in the SQL — dropped.")
-        spec["args"] = used_params
+    seen.add(dedup_key)
 
     fallback_column = spec.get("fallback_column")
     if fallback_column and fallback_column.lower() not in known_columns_lower:
         warnings.append(f"Tool '{name}': fallback_column '{fallback_column}' doesn't match any known column — dropping the fallback for this tool.")
         spec["fallback_column"] = None
-
-    # Hard safety net, not just a prompt instruction: an unbounded join
-    # (e.g. one row per ticket rather than per employee) can return a
-    # result too large for the model's own context window to accept back —
-    # hit this for real testing an employee/project/lead query that
-    # returned 233k tokens against a 131k-token model limit. Don't rely on
-    # the model remembering to add LIMIT; cap it here too.
-    if not re.search(r"\blimit\s+\d+\b", sql, re.IGNORECASE):
-        spec["sql"] = sql.rstrip().rstrip(";") + " LIMIT 200"
-        warnings.append(f"Tool '{name}': no LIMIT in the generated SQL — capped at 200 rows to avoid an oversized result.")
 
     code = _render_tool_code(spec, catalog, schema)
     return {"name": name, "description": spec.get("description", ""), "code": code}
@@ -285,9 +304,9 @@ def build_agent_plan(
     warnings: list[str] = []
     tools: list[dict[str, Any]] = []
     depends_on_by_name: dict[str, Optional[str]] = {}
-    seen_sql: set[str] = set()
+    seen: set[tuple] = set()
     for spec in tool_specs:
-        result = _validate_and_render_tool(spec, catalog, schema, known_tables_lower, known_columns_lower, seen_sql, warnings)
+        result = _validate_and_render_tool(spec, catalog, schema, known_tables_lower, known_columns_lower, seen, warnings)
         if result is None:
             continue
         tools.append(result)

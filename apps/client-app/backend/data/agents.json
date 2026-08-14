@@ -1,1 +1,1 @@
-[]
+[{"name":"test","prompt":"analysis","model":"databricks-meta-llama-3-1-8b-instruct","mode":"custom","tools":[],"graph":{"entry":"node-think-1","nodes":[{"id":"node-think-1","type":"think","x":20,"y":20},{"id":"node-tool-1","type":"tool","x":210,"y":20,"tool_id":"tool-76b99a36"}],"edges":[{"source":"node-think-1","target":"node-tool-1"},{"source":"node-tool-1","target":"node-think-1"}]},"visible_to_groups":[],"status":"published","id":"agent-4fccfecc","created_at":"2026-08-14T06:48:49.005834+00:00"}]
