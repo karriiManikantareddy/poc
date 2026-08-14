@@ -37,6 +37,8 @@ import json
 import re
 from typing import Any, Optional
 
+from databricks.sdk import WorkspaceClient
+
 import connectors
 from connectors import ConnectorError
 from dbx_chat import DatabricksEndpointChat
@@ -57,6 +59,8 @@ Hard rules:
 - If a join can multiply rows (e.g. joining to a table with many rows per parent, like tickets per employee), use SELECT DISTINCT or aggregate instead of returning every joined row — otherwise the result can be enormous even though the answer is small.
 - This agent will be asked many different follow-up questions later, not just the exact task wording above. For EVERY column in base_sql's own SELECT list that identifies a specific named thing (a person's name, a project name, a status, an ID, an email) — not just ones the task literally mentions filtering by — add a matching entry to "filters": {{"arg": "lead_name", "column": "p.lead_name", "required": false}} ("column" may be qualified with the table alias used in base_sql). Go through the SELECT list column by column and ask "would someone plausibly want to filter by this specific value later?" — if yes, it needs a filter, even if the task text never says the word "filter" or mentions that column by name. A tool with no way to filter on a column it selects forces the model to eyeball-search raw text for one matching row later, which is unreliable and has produced wrong answers. Set "required": true only when the tool is meaningless without that value; leave it false when the tool should also work as a "list everything" call.
 - If the task implies "if it's not in the obvious table, check every table" for a concept (e.g. leads, customers), set "fallback_column" to the single column name that identifies that concept elsewhere (e.g. "lead_name"). Leave it null if the task doesn't need that.
+- When the task asks about people who generally work on / are assigned to / participate in something (as opposed to a specific named role like "the lead" or "the manager" of it), do NOT join through a foreign key column whose name denotes that specific role (e.g. projects.lead_id, projects.manager_id, projects.owner_id, projects.created_by). A column like "lead_id" answers "who holds the lead role for this row," not "who works on this row" — joining a person table to it will silently return ONLY people who hold that role, which is a completely different (and wrong) answer to "list the employees on this project." Instead, look for an activity/assignment/membership-shaped table (tickets, time entries, project members, etc.) that records general participation, and join through that.
+- When more than one table could plausibly connect two entities, prefer whichever one connects them in a single join hop over one needing two or more hops through an intermediate table — every extra hop is another foreign key you're guessing the meaning of from its name alone, and a wrong guess produces a query that runs successfully but silently returns nothing. If a table has both a person's ID (e.g. assignee_id) and the other entity's ID (e.g. project_id) directly on the same row, that is almost always the safer, more direct join.
 - If a tool's argument value can only be known from ANOTHER tool's result (e.g. "find the lead, then look up that lead's workload"), set "depends_on" to that other tool's exact name. Leave it null if the tool can run on its own with arguments the user directly provides. Don't invent a dependency that isn't really there — most tools should have depends_on: null.
 - Never propose two tools whose base_sql and filters are essentially the same thing — every tool must answer a genuinely different question.
 - Output ONLY one JSON object. No prose, no markdown code fences, nothing before or after it.
@@ -202,6 +206,34 @@ def _render_tool_code(spec: dict[str, Any], catalog: str, schema: str) -> str:
 '''
 
 
+def _test_run_tool(name: str, code: str, has_required_filter: bool, warnings: list[str]) -> None:
+    """Actually executes a freshly generated tool once, unfiltered, using
+    the app's own identity — not a hypothetical check. Schema/column
+    validation can only catch a table or column that doesn't exist; it
+    cannot catch a join that's syntactically fine but connects the wrong
+    rows (e.g. joining through a foreign key that references a different
+    table than the one aliased in the query). That exact failure mode
+    showed up for real: a generated tool joined `time_entries` to
+    `projects` directly, when `time_entries.project_activity_id` actually
+    points at `project_activities`, not `projects` — the query ran
+    successfully and silently returned zero rows every time. An empirical
+    test call, run once during generation, catches that a static check
+    never could. Skipped for tools with a required filter, since calling
+    those with no value legitimately returns nothing and would be a false
+    alarm, not a real signal."""
+    if has_required_filter:
+        return
+    try:
+        namespace: dict[str, Any] = {"w": WorkspaceClient()}
+        exec(code, namespace)  # noqa: S102 - same Action Pack execution model as everywhere else
+        result = str(namespace[name]())
+    except Exception as exc:  # noqa: BLE001 - a test-run failure is itself the finding
+        warnings.append(f"Tool '{name}' was test-run and raised an error ({exc}) — review the generated SQL before relying on it.")
+        return
+    if result.startswith("No matching data found") or result.startswith("Query failed"):
+        warnings.append(f"Tool '{name}' was test-run and returned no data ({result}) — the generated join may not correctly connect these tables. Review it (the 'View / edit generated code' button) before relying on it.")
+
+
 def _validate_and_render_tool(
     spec: dict[str, Any],
     catalog: str,
@@ -265,6 +297,8 @@ def _validate_and_render_tool(
         spec["fallback_column"] = None
 
     code = _render_tool_code(spec, catalog, schema)
+    has_required_filter = any(f.get("required") for f in valid_filters)
+    _test_run_tool(name, code, has_required_filter, warnings)
     description = spec.get("description", "") + " Accepts an optional 'limit' argument (a number as a string, default 50, max 200) to control how many rows come back — e.g. pass limit='10' for a top-10 request, or leave it default for a general listing."
     return {"name": name, "description": description, "code": code}
 
