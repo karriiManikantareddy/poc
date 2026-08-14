@@ -227,9 +227,12 @@
     <label for="tl-code">Python code — must define a function with the exact name above</label>
     <p class="hint" style="margin:0 0 8px;">A ready-to-use client is available as <code>w</code> — it's already scoped to the employee running the agent. Use <code>w.statement_execution.execute_statement(...)</code> etc. directly; don't construct your own <code>WorkspaceClient()</code>, or you'll silently lose that per-employee scoping.</p>
     <textarea id="tl-code" rows="8" class="code-input" placeholder="def lookup_order_status(order_id: str) -> str:&#10;    return f'Order {order_id} is in transit'"></textarea>
-    <div class="modal-actions" style="margin-top:16px;">
-      <button class="btn secondary" id="tool-modal-cancel">Cancel</button>
-      <button class="btn" id="tool-modal-save">Save Tool</button>
+    <div class="modal-actions" style="margin-top:16px;justify-content:space-between;">
+      <button class="btn danger" id="tool-modal-delete" style="display:none;">Delete Tool</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn secondary" id="tool-modal-cancel">Cancel</button>
+        <button class="btn" id="tool-modal-save">Save Tool</button>
+      </div>
     </div>
   </div>
 </div>

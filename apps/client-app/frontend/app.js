@@ -264,14 +264,23 @@ function renderToolCheckboxes(selectedToolIds) {
   const list = tools
     .map(
       (t) => `
-    <label class="checkbox-label" style="margin:4px 0;">
-      <input type="checkbox" class="ag-tool-checkbox" value="${escapeHtml(t.id)}" ${selectedToolIds.includes(t.id) ? "checked" : ""}>
-      ${escapeHtml(t.name)} — <span class="hint" style="margin:0;">${escapeHtml(t.description || "")}</span>
-    </label>`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0;">
+      <label class="checkbox-label" style="margin:0;flex:1;">
+        <input type="checkbox" class="ag-tool-checkbox" value="${escapeHtml(t.id)}" ${selectedToolIds.includes(t.id) ? "checked" : ""}>
+        ${escapeHtml(t.name)} — <span class="hint" style="margin:0;">${escapeHtml(t.description || "")}</span>
+      </label>
+      <span class="tool-edit" data-tool="${escapeHtml(t.id)}" title="View / edit / delete this tool" style="cursor:pointer;font-size:11px;color:var(--faint);white-space:nowrap;margin-left:8px;">edit</span>
+    </div>`
     )
     .join("");
   container.innerHTML = (list || `<p class="hint">No tools created yet.</p>`) + `<button class="btn secondary small" id="ag-new-tool-btn" style="margin-top:8px;">+ New Tool</button>`;
   document.getElementById("ag-new-tool-btn").addEventListener("click", () => openToolModal());
+  container.querySelectorAll(".tool-edit").forEach((el) => {
+    el.addEventListener("click", () => {
+      const tool = tools.find((t) => t.id === el.dataset.tool);
+      if (tool) openToolModal(tool);
+    });
+  });
 }
 
 // ---------------- Custom mode: visual graph canvas ----------------
@@ -543,8 +552,19 @@ function openToolModal(tool) {
   document.getElementById("tl-name").value = tool ? tool.name : "";
   document.getElementById("tl-description").value = tool ? tool.description || "" : "";
   document.getElementById("tl-code").value = tool ? tool.code : "";
+  document.getElementById("tool-modal-delete").style.display = tool ? "" : "none";
   document.getElementById("tool-modal").hidden = false;
 }
+
+document.getElementById("tool-modal-delete").addEventListener("click", async () => {
+  if (!editingToolId) return;
+  if (!confirm("Delete this tool? Any agent or canvas node still referencing it will show an error until you remove it there too.")) return;
+  await api("DELETE", `/tools/${editingToolId}`, undefined);
+  document.getElementById("tool-modal").hidden = true;
+  await loadTools();
+  renderToolCheckboxes(Array.from(document.querySelectorAll(".ag-tool-checkbox:checked")).map((el) => el.value));
+  if (document.getElementById("ag-custom-section").style.display !== "none") renderCanvas();
+});
 
 document.getElementById("tool-modal-save").addEventListener("click", async () => {
   const name = document.getElementById("tl-name").value.trim();

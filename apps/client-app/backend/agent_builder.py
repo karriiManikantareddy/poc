@@ -219,12 +219,23 @@ def build_agent_plan(
     # Deterministic graph: one Think node, entry, bound to every generated
     # tool, each tool looping back to Think — the exact shape already
     # proven live in this app's own hand-built demo agent.
+    #
+    # Positions matter: the canvas renders every node at its literal x/y
+    # in pixels, and a node with no x/y renders at an undefined position —
+    # in practice every node collapses onto the same spot and visually
+    # overlaps. Laid out here on the same column/row grid the canvas's own
+    # "+ Think/Tool node" buttons use, so a generated flow looks like one
+    # someone built by hand, not a stack of hidden nodes.
+    def _grid_pos(idx: int) -> dict[str, int]:
+        col, row = idx % 3, idx // 3
+        return {"x": 20 + col * 190, "y": 20 + row * 110}
+
     think_id = "node-think-1"
-    graph_nodes = [{"id": think_id, "type": "think"}]
+    graph_nodes = [{"id": think_id, "type": "think", **_grid_pos(0)}]
     graph_edges = []
     for i, _tool in enumerate(tools, start=1):
         tool_node_id = f"node-tool-{i}"
-        graph_nodes.append({"id": tool_node_id, "type": "tool", "tool_name": _tool["name"]})
+        graph_nodes.append({"id": tool_node_id, "type": "tool", "tool_name": _tool["name"], **_grid_pos(i)})
         graph_edges.append({"source": think_id, "target": tool_node_id})
         graph_edges.append({"source": tool_node_id, "target": think_id})
 
