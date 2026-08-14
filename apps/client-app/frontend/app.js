@@ -269,7 +269,8 @@ function renderToolCheckboxes(selectedToolIds) {
         <input type="checkbox" class="ag-tool-checkbox" value="${escapeHtml(t.id)}" ${selectedToolIds.includes(t.id) ? "checked" : ""}>
         ${escapeHtml(t.name)} — <span class="hint" style="margin:0;">${escapeHtml(t.description || "")}</span>
       </label>
-      <span class="tool-edit" data-tool="${escapeHtml(t.id)}" title="View / edit / delete this tool" style="cursor:pointer;font-size:11px;color:var(--faint);white-space:nowrap;margin-left:8px;">edit</span>
+      <span class="tool-edit" data-tool="${escapeHtml(t.id)}" title="View / edit this tool" style="cursor:pointer;font-size:11px;color:var(--faint);white-space:nowrap;margin-left:8px;">edit</span>
+      <span class="tool-delete" data-tool="${escapeHtml(t.id)}" title="Delete this tool" style="cursor:pointer;font-size:13px;color:var(--danger);white-space:nowrap;margin-left:8px;">✕</span>
     </div>`
     )
     .join("");
@@ -279,6 +280,16 @@ function renderToolCheckboxes(selectedToolIds) {
     el.addEventListener("click", () => {
       const tool = tools.find((t) => t.id === el.dataset.tool);
       if (tool) openToolModal(tool);
+    });
+  });
+  container.querySelectorAll(".tool-delete").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const tool = tools.find((t) => t.id === el.dataset.tool);
+      if (!tool) return;
+      if (!confirm(`Delete tool "${tool.name}"? Any agent or canvas node still referencing it will show an error until you remove it there too.`)) return;
+      await api("DELETE", `/tools/${tool.id}`, undefined);
+      await loadTools();
+      renderToolCheckboxes(Array.from(document.querySelectorAll(".ag-tool-checkbox:checked")).map((cb) => cb.value));
     });
   });
 }
