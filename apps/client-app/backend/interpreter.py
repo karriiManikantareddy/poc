@@ -89,7 +89,20 @@ class _FallbackProxy:
     `warehouses.list()`) inside the try block — the SDK's paginated
     `list()` calls are lazy, so the real HTTP request (and any auth
     failure) only happens on the first `next()`, which would otherwise
-    run unprotected outside this method's own try/except."""
+    run unprotected outside this method's own try/except.
+
+    A second, structurally different failure mode found for real while
+    building the agent generator: a SQL permission error (employee's own
+    identity lacks SELECT on some table) does NOT raise a Python
+    exception at all — `execute_statement()` returns normally with
+    `status.state == "FAILED"` inside the response, discovered while
+    testing a generated tool that legitimately had less access than the
+    app's own identity. That's invisible to the try/except above, so a
+    real employee missing a grant the app identity has would silently
+    get "no rows" instead of a working fallback. Detected by duck-typing
+    the return value for that shape and retrying via app identity too —
+    same principle as the exception path, just for a call that succeeds
+    at the API level but fails at the statement level."""
 
     def __init__(self, obo_target: Any, app_target: Any):
         self._obo = obo_target
@@ -106,6 +119,13 @@ class _FallbackProxy:
                 result = obo_attr(*args, **kwargs)
                 if hasattr(result, "__next__"):
                     result = iter(list(result))  # force pagination now, keep it a real iterator
+                elif _looks_like_failed_statement(result):
+                    try:
+                        app_result = app_attr(*args, **kwargs)
+                        if not _looks_like_failed_statement(app_result):
+                            return app_result
+                    except Exception:  # noqa: BLE001 - app identity errored too; keep the OBO result, it's at least a real response
+                        pass
                 return result
             except Exception as obo_exc:  # noqa: BLE001 - any OBO failure degrades to app identity
                 try:
@@ -117,6 +137,16 @@ class _FallbackProxy:
                     raise obo_exc
 
         return wrapper
+
+
+def _looks_like_failed_statement(result: Any) -> bool:
+    """True for a StatementResponse-shaped object whose statement itself
+    failed (e.g. a SQL-level permission error) — the specific shape that
+    slips past the exception-based fallback above because the API call
+    that returned it didn't raise anything."""
+    status = getattr(result, "status", None)
+    state = getattr(status, "state", None)
+    return bool(state and getattr(state, "value", None) == "FAILED")
 
 
 class _ResilientWorkspaceClient:

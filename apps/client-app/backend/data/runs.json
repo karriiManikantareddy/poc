@@ -1306,5 +1306,106 @@
     ],
     "timestamp": "2026-08-12T21:09:48.289880+00:00",
     "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-ae03b487",
+    "agent_id": "agent-43fb0551",
+    "question": "i want swamymanikantareddy employee details",
+    "answer": "The employee details for swamymanikantareddy are not available as there is no matching data found in the workspace.default.users.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-think-1",
+        "content": "",
+        "tool_calls": [
+          "get_employee_details"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-tool-1",
+        "tool": "get_employee_details",
+        "args": {
+          "employee_name": "swamymanikantareddy"
+        },
+        "result": "No matching data found in workspace.default.users."
+      },
+      {
+        "step": "think",
+        "node": "node-think-1",
+        "content": "The employee details for swamymanikantareddy are not available as there is no matching data found in the workspace.default.users.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-14T05:42:11.557807+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-0f1daf52",
+    "agent_id": "agent-43fb0551",
+    "question": "what employe name do you have",
+    "answer": "It seems like I don't have any specific employee data. Let's try a different approach. Can you please provide more context or clarify what you're looking for? I'll do my best to assist you.",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-think-1",
+        "content": "",
+        "tool_calls": [
+          "get_employee_details"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-tool-1",
+        "tool": "get_employee_details",
+        "args": {
+          "employee_name": "John Doe"
+        },
+        "result": "No matching data found in workspace.default.users."
+      },
+      {
+        "step": "think",
+        "node": "node-think-1",
+        "content": "",
+        "tool_calls": [
+          "get_employee_details"
+        ]
+      },
+      {
+        "step": "act",
+        "node": "node-tool-1",
+        "tool": "get_employee_details",
+        "args": {
+          "employee_name": "Jane Smith"
+        },
+        "result": "No matching data found in workspace.default.users."
+      },
+      {
+        "step": "think",
+        "node": "node-think-1",
+        "content": "It seems like I don't have any specific employee data. Let's try a different approach. Can you please provide more context or clarify what you're looking for? I'll do my best to assist you.",
+        "tool_calls": []
+      }
+    ],
+    "timestamp": "2026-08-14T05:42:37.112957+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
+  },
+  {
+    "id": "run-ae39f6ea",
+    "agent_id": "agent-43fb0551",
+    "question": "what employe names do you have. list out the name you have",
+    "answer": "",
+    "trace": [
+      {
+        "step": "think",
+        "node": "node-think-1",
+        "content": "",
+        "tool_calls": [
+          "available_employee_names"
+        ]
+      }
+    ],
+    "timestamp": "2026-08-14T05:42:58.825346+00:00",
+    "ran_as": "employee (swamymanikantareddykarri@gmail.com) for tools; app identity for the model call (see dbx_chat.py notes)"
   }
 ]
