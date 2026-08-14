@@ -159,6 +159,40 @@ def list_schemas(catalog: str) -> list[str]:
         raise ConnectorError(str(exc)) from exc
 
 
+def list_tables(catalog: str, schema: str) -> list[dict[str, Any]]:
+    """Real, live table + column introspection for one catalog.schema — this
+    is what lets the agent generator (agent_builder.py) reason about an
+    actually-connected source's real structure instead of guessing table or
+    column names. Works identically for a native UC schema or a BigQuery/
+    Postgres/etc. foreign catalog created through the Connectors tab, since
+    both are ordinary UC tables once the connection exists.
+
+    `w.tables.list()` returns summaries without column detail on some
+    workspaces, so column info is fetched per table via `w.tables.get()` —
+    an N+1 pattern, acceptable here since this only runs when a human
+    explicitly asks to generate an agent, not on every page load."""
+    w = _client()
+    try:
+        summaries = list(w.tables.list(catalog_name=catalog, schema_name=schema))
+    except DatabricksError as exc:
+        raise ConnectorError(str(exc)) from exc
+
+    result = []
+    for t in summaries:
+        columns = t.columns
+        if not columns:
+            try:
+                full = w.tables.get(full_name=f"{catalog}.{schema}.{t.name}")
+                columns = full.columns
+            except DatabricksError:
+                columns = []
+        result.append({
+            "name": t.name,
+            "columns": [{"name": c.name, "type": c.type_text or (c.type_name.value if c.type_name else "")} for c in (columns or [])],
+        })
+    return result
+
+
 def create_ingestion_pipeline(
     name: str,
     connection_name: str,

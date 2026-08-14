@@ -235,6 +235,9 @@ async function openAgentModal(agent) {
   document.getElementById("ag-mode").value = mode;
   canvasGraph = agent && agent.graph ? JSON.parse(JSON.stringify(agent.graph)) : { entry: null, nodes: [], edges: [] };
   applyAgentModeUI(mode);
+  document.getElementById("ag-gen-task").value = "";
+  feedback(document.getElementById("ag-generate-feedback"), "", "");
+  loadGenCatalogs();
   if (mode === "custom") renderCanvas();
 
   const groupsContainer = document.getElementById("ag-groups-list");
@@ -349,6 +352,7 @@ function renderCanvas() {
           <option value="">Pick a tool...</option>
           ${tools.map((t) => `<option value="${escapeHtml(t.id)}" ${node.tool_id === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
         </select>
+        <button type="button" class="btn secondary small canvas-view-code" data-node="${node.id}" style="width:100%;margin-top:4px;font-size:11px;padding:3px;" ${node.tool_id ? "" : "disabled"}>View / edit generated code</button>
         <textarea class="canvas-default-args" data-node="${node.id}" rows="2" placeholder="{} — args used only when no Think node called this (e.g. as the start)" style="width:100%;margin-top:4px;font-size:11px;padding:4px;font-family:monospace;">${escapeHtml(JSON.stringify(node.default_args || {}))}</textarea>
         <div class="canvas-args-error" data-node="${node.id}" style="color:var(--danger);font-size:10px;"></div>`;
     } else {
@@ -419,6 +423,15 @@ function wireCanvasNodeEvents() {
   document.querySelectorAll(".canvas-tool-select").forEach((el) => {
     el.addEventListener("change", () => {
       nodeById(el.dataset.node).tool_id = el.value;
+      renderCanvas();
+    });
+  });
+
+  document.querySelectorAll(".canvas-view-code").forEach((el) => {
+    el.addEventListener("click", () => {
+      const node = nodeById(el.dataset.node);
+      const tool = tools.find((t) => t.id === node.tool_id);
+      if (tool) openToolModal(tool);
     });
   });
 
@@ -517,15 +530,19 @@ document.getElementById("agent-modal-save").addEventListener("click", async () =
   if (editingAgentId) selectAgent(editingAgentId);
 });
 
-// ---------------- Tool modal (create) ----------------
+// ---------------- Tool modal (create / edit) ----------------
+let editingToolId = null; // null => creating new
+
 document.getElementById("tool-modal-cancel").addEventListener("click", () => {
   document.getElementById("tool-modal").hidden = true;
 });
 
-function openToolModal() {
-  document.getElementById("tl-name").value = "";
-  document.getElementById("tl-description").value = "";
-  document.getElementById("tl-code").value = "";
+function openToolModal(tool) {
+  editingToolId = tool ? tool.id : null;
+  document.getElementById("tool-modal-title").textContent = tool ? "Edit Tool" : "New Tool (Action Pack)";
+  document.getElementById("tl-name").value = tool ? tool.name : "";
+  document.getElementById("tl-description").value = tool ? tool.description || "" : "";
+  document.getElementById("tl-code").value = tool ? tool.code : "";
   document.getElementById("tool-modal").hidden = false;
 }
 
@@ -534,10 +551,81 @@ document.getElementById("tool-modal-save").addEventListener("click", async () =>
   const description = document.getElementById("tl-description").value.trim();
   const code = document.getElementById("tl-code").value;
   if (!name || !code) return;
-  await api("POST", "/tools", { name, description, code });
+  if (editingToolId) {
+    await api("PUT", `/tools/${editingToolId}`, { name, description, code });
+  } else {
+    await api("POST", "/tools", { name, description, code });
+  }
   document.getElementById("tool-modal").hidden = true;
   await loadTools();
   renderToolCheckboxes(Array.from(document.querySelectorAll(".ag-tool-checkbox:checked")).map((el) => el.value));
+  if (document.getElementById("ag-custom-section").style.display !== "none") renderCanvas();
+});
+
+// ---------------- Agent Builder (generate tools + flow from a prompt) ----------------
+async function loadGenCatalogs() {
+  const catSelect = document.getElementById("ag-gen-catalog");
+  catSelect.innerHTML = `<option value="">Loading catalogs...</option>`;
+  document.getElementById("ag-gen-schema").innerHTML = `<option value="">Pick a catalog first</option>`;
+  try {
+    const cats = await api("GET", "/catalogs");
+    catSelect.innerHTML = `<option value="">Select a source catalog...</option>` + cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  } catch (e) {
+    catSelect.innerHTML = `<option value="">Could not load: ${escapeHtml(e.message)}</option>`;
+  }
+}
+
+document.getElementById("ag-gen-catalog").addEventListener("change", async () => {
+  const catalog = document.getElementById("ag-gen-catalog").value;
+  const schemaSelect = document.getElementById("ag-gen-schema");
+  if (!catalog) {
+    schemaSelect.innerHTML = `<option value="">Pick a catalog first</option>`;
+    return;
+  }
+  schemaSelect.innerHTML = `<option value="">Loading schemas...</option>`;
+  try {
+    const schemas = await api("GET", `/catalogs/${encodeURIComponent(catalog)}/schemas`);
+    schemaSelect.innerHTML = `<option value="">Select a schema...</option>` + schemas.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  } catch (e) {
+    schemaSelect.innerHTML = `<option value="">Could not load: ${escapeHtml(e.message)}</option>`;
+  }
+});
+
+document.getElementById("ag-generate-btn").addEventListener("click", async () => {
+  const catalog = document.getElementById("ag-gen-catalog").value;
+  const schema_name = document.getElementById("ag-gen-schema").value;
+  const task = document.getElementById("ag-gen-task").value.trim();
+  const model = document.getElementById("ag-model").value;
+  const feedbackEl = document.getElementById("ag-generate-feedback");
+  if (!catalog || !schema_name) {
+    feedback(feedbackEl, "err", "Pick a source catalog and schema first.");
+    return;
+  }
+  if (!task) {
+    feedback(feedbackEl, "err", "Describe the task in the box above.");
+    return;
+  }
+  if (!model) {
+    feedback(feedbackEl, "err", "Pick a model above first — the generator uses it to write the tools.");
+    return;
+  }
+  const btn = document.getElementById("ag-generate-btn");
+  btn.disabled = true;
+  feedback(feedbackEl, "pending", "Reading the live schema and writing tools...");
+  try {
+    const result = await api("POST", "/agents/generate", { task, model, catalog, schema_name });
+    await loadTools(); // pick up the newly created tools
+    canvasGraph = result.graph;
+    renderCanvas();
+    const warningsHtml = result.warnings.length
+      ? `<div style="margin-top:4px;">Warnings:<ul style="margin:2px 0;padding-left:18px;">${result.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>`
+      : "";
+    feedback(feedbackEl, "ok", `Generated ${result.tools.length} tool(s) — review the flow below (click a tool node's code icon to inspect what was written), then Save.${warningsHtml}`);
+  } catch (e) {
+    feedback(feedbackEl, "err", escapeHtml(e.message));
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ---------------- CONNECTORS ----------------

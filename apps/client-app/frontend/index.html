@@ -135,6 +135,16 @@
     </div>
 
     <div id="ag-custom-section" style="display:none;">
+      <div class="section-title" style="margin-top:var(--sp-4);">Build with AI</div>
+      <p class="hint" style="margin:0 0 8px;">Pick the connected source this agent should analyze, describe the task in plain English, and the tools + flow below are written automatically from the source's real, live schema — nothing is hardcoded to any one dataset.</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <select id="ag-gen-catalog" style="flex:1;"><option value="">Loading catalogs...</option></select>
+        <select id="ag-gen-schema" style="flex:1;"><option value="">Pick a catalog first</option></select>
+      </div>
+      <textarea id="ag-gen-task" rows="3" placeholder="e.g. Tell me which lead has how many projects. If leads aren't in the obvious table, check every table for a similar column."></textarea>
+      <button class="btn secondary small" id="ag-generate-btn" style="margin-top:4px;">Generate Tools &amp; Flow</button>
+      <div id="ag-generate-feedback" class="feedback"></div>
+
       <div class="section-title" style="margin-top:var(--sp-4);">Flow canvas</div>
       <p class="hint" style="margin:0 0 8px;">Drag a node to move it. Drag from the small dot on a node's edge to another node to connect them. Click a node's star to mark it as the starting node. A Think node's available tools are exactly the Tool nodes it's connected to.</p>
       <div style="display:flex;gap:8px;margin-bottom:8px;">

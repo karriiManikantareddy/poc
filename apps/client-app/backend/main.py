@@ -27,9 +27,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import agent_builder
 import connectors
 import identity
 import store
+from agent_builder import AgentBuilderError
 from connectors import ConnectorError
 from interpreter import AgentError, run_agent
 
@@ -163,6 +165,50 @@ def run(agent_id: str, body: RunRequest, request: Request):
     return record
 
 
+class GenerateAgentRequest(BaseModel):
+    task: str
+    model: str
+    catalog: str
+    schema_name: str
+
+
+@app.post("/api/agents/generate")
+def generate_agent(body: GenerateAgentRequest, request: Request):
+    """Auto-writes an agent's tools and flow graph from a plain-English task
+    description plus the real, live schema of a connected source (see
+    agent_builder.py). Persists the generated tools immediately so the
+    canvas can render them like any other tool, but does NOT create or
+    publish the agent itself — the caller reviews the generated flow in the
+    canvas and explicitly saves, matching the generate-then-review model
+    chosen for this (LLM-written SQL executing against a real source is
+    not something to auto-publish and auto-run unreviewed)."""
+    caller = identity.get_caller(request)
+    try:
+        plan = agent_builder.build_agent_plan(
+            task=body.task,
+            model_endpoint=body.model,
+            catalog=body.catalog,
+            schema=body.schema_name,
+            obo_token=caller.access_token,
+        )
+    except AgentBuilderError as exc:
+        raise HTTPException(400, str(exc))
+
+    name_to_id: dict[str, str] = {}
+    created_tools = []
+    for tool in plan["tools"]:
+        tool["id"] = f"tool-{uuid.uuid4().hex[:8]}"
+        name_to_id[tool["name"]] = tool["id"]
+        created_tools.append(store.upsert_item("tools", tool))
+
+    graph = plan["graph"]
+    for node in graph["nodes"]:
+        if node["type"] == "tool":
+            node["tool_id"] = name_to_id[node.pop("tool_name")]
+
+    return {"tools": created_tools, "graph": graph, "warnings": plan["warnings"]}
+
+
 @app.get("/api/agents/{agent_id}/runs")
 def agent_runs(agent_id: str, request: Request):
     agent = store.get_item("agents", agent_id)
@@ -256,6 +302,16 @@ def catalogs():
 def schemas(catalog: str):
     try:
         return connectors.list_schemas(catalog)
+    except ConnectorError as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.get("/api/catalogs/{catalog}/schemas/{schema}/tables")
+def tables(catalog: str, schema: str):
+    """Real, live table + column introspection — what the agent generator
+    (below) reasons over, and what proves it isn't guessing table names."""
+    try:
+        return connectors.list_tables(catalog, schema)
     except ConnectorError as exc:
         raise HTTPException(502, str(exc))
 
