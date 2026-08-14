@@ -38,6 +38,8 @@ Hard rules:
 - Each tool runs exactly ONE SQL statement against exactly one table listed under "table" (fully qualified as catalog.schema.table).
 - Use named parameters in the SQL as :param_name, and list every one of them in "args".
 - Prefer doing joins, counts, and aggregations inside the SQL itself (GROUP BY, COUNT, JOIN) rather than returning raw rows for the caller to manually tally — SQL is reliable at counting, free-text reasoning over raw rows is not.
+- If a join can multiply rows (e.g. joining to a table with many rows per parent, like tickets per employee), use SELECT DISTINCT or aggregate instead of returning every joined row — otherwise the result can be enormous even though the answer is small.
+- Always include a LIMIT (e.g. LIMIT 50) unless the query already aggregates down to a handful of groups. A result that's too large to fit in the caller's context is treated as a failure, not a success.
 - If the task implies "if it's not in the obvious table, check every table" for a concept (e.g. leads, customers), set "fallback_column" to the single column name that identifies that concept elsewhere (e.g. "lead_name"). Leave it null if the task doesn't need that.
 - Output ONLY one JSON object. No prose, no markdown code fences, nothing before or after it.
 
@@ -193,6 +195,16 @@ def build_agent_plan(
         if fallback_column and fallback_column not in known_columns:
             warnings.append(f"Tool '{name}': fallback_column '{fallback_column}' doesn't match any known column — dropping the fallback for this tool.")
             spec["fallback_column"] = None
+
+        # Hard safety net, not just a prompt instruction: an unbounded join
+        # (e.g. one row per ticket rather than per employee) can return a
+        # result too large for the model's own context window to accept
+        # back — hit this for real testing an employee/project/lead query
+        # that returned 233k tokens against a 131k-token model limit. Don't
+        # rely on the model remembering to add LIMIT; cap it here too.
+        if not re.search(r"\blimit\s+\d+\b", sql, re.IGNORECASE):
+            spec["sql"] = sql.rstrip().rstrip(";") + " LIMIT 200"
+            warnings.append(f"Tool '{name}': no LIMIT in the generated SQL — capped at 200 rows to avoid an oversized result.")
 
         code = _render_tool_code(spec, catalog, schema)
         tools.append({
